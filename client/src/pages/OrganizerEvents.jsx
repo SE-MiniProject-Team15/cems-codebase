@@ -1,13 +1,13 @@
 
-import { useCallback, useEffect, useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import {
   createEvent,
   getMyEvents,
   updateEvent,
   cancelEvent,
   getCurrentUser,
-} from '../services/api'
+} from '../services/api';
 
 const emptyForm = {
   title: '',
@@ -20,7 +20,7 @@ const emptyForm = {
   capacity: '50',
   bannerUrl: '',
   registrationDeadline: '',
-}
+};
 
 const fields = [
   ['title', 'Event title', 'text'],
@@ -33,19 +33,19 @@ const fields = [
   ['capacity', 'Maximum capacity', 'number'],
   ['bannerUrl', 'Banner image URL', 'url'],
   ['registrationDeadline', 'Registration deadline', 'datetime-local'],
-]
+];
 
 function toLocalDateTime(value) {
-  if (!value) return ''
+  if (!value) return '';
 
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
 
-  const offset = date.getTimezoneOffset()
+  const offset = date.getTimezoneOffset();
 
   return new Date(date.getTime() - offset * 60000)
     .toISOString()
-    .slice(0, 16)
+    .slice(0, 16);
 }
 
 function toFormData(event) {
@@ -59,192 +59,215 @@ function toFormData(event) {
     endDateTime: toLocalDateTime(event.endDateTime),
     capacity: String(event.capacity ?? 50),
     bannerUrl: event.bannerUrl || '',
-    registrationDeadline: toLocalDateTime(event.registrationDeadline),
-  }
+    registrationDeadline: toLocalDateTime(
+      event.registrationDeadline
+    ),
+  };
 }
 
 function OrganizerEvents() {
-  const [user, setUser] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
-  const [authError, setAuthError] = useState('')
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
 
-  const [events, setEvents] = useState([])
-  const [form, setForm] = useState(emptyForm)
-  const [editingId, setEditingId] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  const [events, setEvents] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
+  // Load events when the user explicitly refreshes or saves a change.
   const loadEvents = useCallback(async () => {
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError('');
 
     try {
-      const response = await getMyEvents()
-      setEvents(response.data?.events || [])
+      const response = await getMyEvents();
+      setEvents(response.data?.events || []);
     } catch (err) {
       setError(
-        err.response?.data?.message || 'Could not load your events.'
-      )
+        err.response?.data?.message ||
+          'Could not load your events.'
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }, []);
 
+  // Verify the current login.
   useEffect(() => {
-    let active = true
+    let active = true;
 
     async function checkAuthentication() {
       try {
-        const response = await getCurrentUser()
+        const response = await getCurrentUser();
 
-        if (!active) return
+        if (!active) return;
 
-        const currentUser = response.data?.user
+        const currentUser = response.data?.user;
+
         if (!currentUser) {
-          setAuthError('Your session could not be verified. Please log in again.')
-          return
+          setAuthError(
+            'Your session could not be verified. Please log in again.'
+          );
+          return;
         }
 
-        setUser(currentUser)
+        setUser(currentUser);
       } catch (err) {
-        if (!active) return
+        if (!active) return;
 
         if (err.response?.status === 401) {
-          setAuthError('Your session has expired. Please log in again.')
+          setAuthError(
+            'Your session has expired. Please log in again.'
+          );
         } else {
           setAuthError(
             err.response?.data?.message ||
               'Could not verify your login. Check that the backend is running.'
-          )
+          );
         }
       } finally {
-        if (active) setAuthLoading(false)
+        if (active) {
+          setAuthLoading(false);
+        }
       }
     }
 
-    checkAuthentication()
+    checkAuthentication();
 
     return () => {
-      active = false
-    }
-  }, [])
+      active = false;
+    };
+  }, []);
 
+  // Fetch events after authentication has completed.
+  // The request updates state asynchronously and is cancelled on cleanup.
   useEffect(() => {
-  if (authLoading || user?.role !== 'Organizer') return;
+    if (authLoading) return;
 
-  let active = true;
-
-  async function fetchEvents() {
-    try {
-      const response = await getMyEvents();
-
-      if (active) {
-        setEvents(response.data?.events || []);
-        setError('');
-      }
-    } catch (err) {
-      if (active) {
-        setError(
-          err.response?.data?.message || 'Could not load your events.'
-        );
-      }
-    } finally {
-      if (active) setLoading(false);
+    if (user?.role !== 'Organizer') {
+      return;
     }
-  }
 
-  fetchEvents();
+    let active = true;
 
-  return () => {
-    active = false;
-  };
-}, [user, authLoading]);
+    async function fetchEvents() {
+      try {
+        const response = await getMyEvents();
+
+        if (active) {
+          setEvents(response.data?.events || []);
+          setError('');
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err.response?.data?.message ||
+              'Could not load your events.'
+          );
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    fetchEvents();
+
+    return () => {
+      active = false;
+    };
+  }, [user, authLoading]);
 
   function handleChange(event) {
-    const { name, value } = event.target
+    const { name, value } = event.target;
 
     setForm((previous) => ({
       ...previous,
       [name]: value,
-    }))
+    }));
   }
 
   function resetForm() {
-    setForm(emptyForm)
-    setEditingId(null)
+    setForm(emptyForm);
+    setEditingId(null);
   }
 
   async function handleSubmit(event, isDraft = false) {
-    event.preventDefault()
+    event.preventDefault();
 
-    if (busy) return
+    if (busy) return;
 
-    setBusy(true)
-    setError('')
-    setMessage('')
+    setBusy(true);
+    setError('');
+    setMessage('');
 
     const payload = {
       ...form,
       capacity: Number(form.capacity),
       status: isDraft ? 'Draft' : 'Pending Approval',
-    }
+    };
 
     try {
       if (editingId) {
-        await updateEvent(editingId, payload)
+        await updateEvent(editingId, payload);
       } else {
-        await createEvent(payload)
+        await createEvent(payload);
       }
 
       setMessage(
         isDraft
           ? 'Draft saved successfully.'
           : 'Event submitted for approval.'
-      )
+      );
 
-      resetForm()
-      await loadEvents()
+      resetForm();
+      await loadEvents();
     } catch (err) {
       setError(
-        err.response?.data?.message || 'Could not save the event.'
-      )
+        err.response?.data?.message ||
+          'Could not save the event.'
+      );
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   function startEditing(event) {
-    setEditingId(event._id)
-    setForm(toFormData(event))
-    setError('')
-    setMessage('')
+    setEditingId(event._id);
+    setForm(toFormData(event));
+    setError('');
+    setMessage('');
 
     window.scrollTo({
       top: 0,
       behavior: 'smooth',
-    })
+    });
   }
 
   async function handleCancel(id) {
     const confirmed = window.confirm(
       'Are you sure you want to cancel this event?'
-    )
+    );
 
-    if (!confirmed) return
+    if (!confirmed) return;
 
-    setError('')
-    setMessage('')
+    setError('');
+    setMessage('');
 
     try {
-      await cancelEvent(id)
-      setMessage('Event cancelled.')
-      await loadEvents()
+      await cancelEvent(id);
+      setMessage('Event cancelled.');
+      await loadEvents();
     } catch (err) {
       setError(
-        err.response?.data?.message || 'Could not cancel the event.'
-      )
+        err.response?.data?.message ||
+          'Could not cancel the event.'
+      );
     }
   }
 
@@ -255,7 +278,7 @@ function OrganizerEvents() {
           <p>Checking your login...</p>
         </section>
       </main>
-    )
+    );
   }
 
   if (authError) {
@@ -270,20 +293,20 @@ function OrganizerEvents() {
           <Link to="/login">Go to login</Link>
         </section>
       </main>
-    )
+    );
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" replace />;
   }
 
   if (user.role !== 'Organizer') {
     const dashboard = {
       Student: '/student/dashboard',
       Admin: '/admin/dashboard',
-    }[user.role]
+    }[user.role];
 
-    return <Navigate to={dashboard || '/login'} replace />
+    return <Navigate to={dashboard || '/login'} replace />;
   }
 
   return (
@@ -294,11 +317,15 @@ function OrganizerEvents() {
         </p>
 
         <h1>Manage your events</h1>
-        <p>Create events, save drafts, and track approval status.</p>
+        <p>
+          Create events, save drafts, and track approval status.
+        </p>
         <p>Welcome, {user.name}.</p>
 
         <p>
-          <Link to="/organizer/dashboard">Back to dashboard</Link>
+          <Link to="/organizer/dashboard">
+            Back to dashboard
+          </Link>
         </p>
 
         {message && <p role="status">{message}</p>}
@@ -328,7 +355,11 @@ function OrganizerEvents() {
                   value={form[name]}
                   onChange={handleChange}
                   required={
-                    !['description', 'bannerUrl', 'registrationDeadline'].includes(name)
+                    ![
+                      'description',
+                      'bannerUrl',
+                      'registrationDeadline',
+                    ].includes(name)
                   }
                 />
               )}
@@ -377,8 +408,12 @@ function OrganizerEvents() {
         )}
 
         {events.map((event) => (
-          <article className="event-list-item" key={event._id}>
+          <article
+            className="event-list-item"
+            key={event._id}
+          >
             <h3>{event.title || 'Untitled draft'}</h3>
+
             <p>
               Status: <strong>{event.status}</strong>
             </p>
@@ -387,7 +422,10 @@ function OrganizerEvents() {
 
             {event.startDateTime && (
               <p>
-                Starts: {new Date(event.startDateTime).toLocaleString()}
+                Starts:{' '}
+                {new Date(
+                  event.startDateTime
+                ).toLocaleString()}
               </p>
             )}
 
@@ -414,7 +452,7 @@ function OrganizerEvents() {
         ))}
       </section>
     </main>
-  )
+  );
 }
 
-export default OrganizerEvents
+export default OrganizerEvents;

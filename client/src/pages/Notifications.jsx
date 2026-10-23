@@ -136,42 +136,37 @@ function OrganizerEvents() {
   }, []);
 
   useEffect(() => {
-    if (authLoading) return;
+  if (authLoading || user?.role !== 'Organizer'){ return};
 
-    if (user?.role !== 'Organizer') {
-      setLoading(false);
-      return;
-    }
+  let active = true;
 
-    let active = true;
+  async function fetchEvents() {
+    setError('');
+    setLoading(true);
 
-    async function fetchEvents() {
-      setError('');
-      setLoading(true);
+    try {
+      const response = await getMyEvents();
 
-      try {
-        const response = await getMyEvents();
-
-        if (active) {
-          setEvents(response.data?.events || []);
-        }
-      } catch (err) {
-        if (active) {
-          setError(
-            err.response?.data?.message || 'Could not load your events.'
-          );
-        }
-      } finally {
-        if (active) setLoading(false);
+      if (active) {
+        setEvents(response.data?.events || []);
       }
+    } catch (err) {
+      if (active) {
+        setError(
+          err.response?.data?.message || 'Could not load your events.'
+        );
+      }
+    } finally {
+      if (active) setLoading(false);
     }
+  }
 
-    fetchEvents();
+  fetchEvents();
 
-    return () => {
-      active = false;
-    };
-  }, [user, authLoading]);
+  return () => {
+    active = false;
+  };
+}, [user, authLoading]);
 
   function handleChange(event) {
     const { name, value } = event.target;

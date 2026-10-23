@@ -132,12 +132,35 @@ function OrganizerEvents() {
   }, [])
 
   useEffect(() => {
-    if (user?.role === 'Organizer') {
-      loadEvents()
-    } else {
-      setLoading(false)
+  if (authLoading || user?.role !== 'Organizer') return;
+
+  let active = true;
+
+  async function fetchEvents() {
+    try {
+      const response = await getMyEvents();
+
+      if (active) {
+        setEvents(response.data?.events || []);
+        setError('');
+      }
+    } catch (err) {
+      if (active) {
+        setError(
+          err.response?.data?.message || 'Could not load your events.'
+        );
+      }
+    } finally {
+      if (active) setLoading(false);
     }
-  }, [user, loadEvents])
+  }
+
+  fetchEvents();
+
+  return () => {
+    active = false;
+  };
+}, [user, authLoading]);
 
   function handleChange(event) {
     const { name, value } = event.target

@@ -18,4 +18,10 @@ export function logoutUser() {
 export function getCurrentUser() {
   return api.get('/auth/me').then(getPayload)
 }
+export function getEvents(params) {
+  return api.get('/events', { params }).then(getPayload)
+}
+export function getEvent(eventId) {
+  return api.get('/events/' + encodeURIComponent(eventId)).then(getPayload)
+}
 export default api

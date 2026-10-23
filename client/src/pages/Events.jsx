@@ -22,7 +22,6 @@ function EventBrowser() {
 
   useEffect(() => {
     let active = true
-    setError('')
     getEvents(Object.fromEntries(params.entries()))
       .then(({ data }) => { if (active) { setEvents(data.events); setPagination(data.pagination) } })
       .catch((err) => { if (active) setError(err.response?.data?.message || 'Could not load events.') })
@@ -32,6 +31,7 @@ function EventBrowser() {
 
   function applyFilters(e) {
     e.preventDefault()
+    setError('')
     setLoading(true)
     const next = new URLSearchParams()
     for (const [key, value] of new FormData(e.currentTarget).entries()) if (value) next.set(key, value)
@@ -39,6 +39,7 @@ function EventBrowser() {
   }
 
   function changePage(page) {
+    setError('')
     setLoading(true)
     const next = new URLSearchParams(params)
     next.set('page', String(page))

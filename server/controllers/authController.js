@@ -18,7 +18,7 @@ function setAuthCookie(res, token) {
     maxAge: 24 * 60 * 60 * 1000,
   })
 }
-async function registerUser(req, res, next) {
+async function registerUser(req, res) {
   const { name, email: submittedEmail, password, role: submittedRole } = req.body || {}
   if (typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ status: 'fail', message: 'Name is required' })
@@ -55,4 +55,65 @@ async function registerUser(req, res, next) {
     setAuthCookie(res, token)
     return res.status(201).json({ status: 'success', data: { user: serializeUser(user) } })
   } catch (error) {
-    if
+    if (error.code === 11000) {
+      return res.status(409).json({ status: 'fail', message: 'Email already registered' })
+    }
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ status: 'fail', message: 'Invalid registration details' })
+    }
+    console.error('Registration failed:', error)
+    return res.status(500).json({ status: 'error', message: 'Unable to complete request' })
+  }
+}
+
+async function loginUser(req, res) {
+  const { email: submittedEmail, password } = req.body || {}
+  if (typeof submittedEmail !== 'string' || !submittedEmail.trim() || typeof password !== 'string' || !password) {
+    return res.status(400).json({ status: 'fail', message: 'Email and password are required' })
+  }
+
+  try {
+    const email = submittedEmail.trim().toLowerCase()
+    const user = await User.findOne({ email }).select('+password loginAttempts lockUntil')
+    const authenticationFailure = { status: 'fail', message: 'Invalid email or password' }
+    const now = Date.now()
+
+    if (user?.lockUntil && user.lockUntil.getTime() > now) {
+      return res.status(401).json(authenticationFailure)
+    }
+
+    if (!user) {
+      return res.status(401).json(authenticationFailure)
+    }
+
+    if (user.lockUntil) {
+      user.loginAttempts = 0
+      user.lockUntil = undefined
+      await user.save()
+    }
+
+    if (!(await user.comparePassword(password))) {
+      user.loginAttempts += 1
+      if (user.loginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000)
+      }
+      await user.save()
+      return res.status(401).json(authenticationFailure)
+    }
+
+    if (user.loginAttempts > 0 || user.lockUntil) {
+      user.loginAttempts = 0
+      user.lockUntil = undefined
+      await user.save()
+    }
+
+    const token = jwt.sign({ id: user._id, role: user.role }, getJwtSecret(), { expiresIn: '1d' })
+    setAuthCookie(res, token)
+    return res.status(200).json({ status: 'success', data: { user: serializeUser(user) } })
+  } catch (error) {
+    console.error('Login failed:', error)
+    return res.status(500).json({ status: 'error', message: 'Unable to complete request' })
+  }
+}
+
+module.exports = { registerUser, loginUser }

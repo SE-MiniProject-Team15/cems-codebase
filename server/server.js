@@ -7,6 +7,10 @@ const authRouter = require('./routes/authRoutes')
 const dashboardRouter = require('./routes/dashboardRoutes')
 dotenv.config()
 const app = express()
+const trustedProxies = (process.env.TRUST_PROXY || '').split(',').map((value) => value.trim()).filter(Boolean)
+if (trustedProxies.length) {
+  app.set('trust proxy', trustedProxies)
+}
 app.disable('x-powered-by')
 app.use((req, res, next) => {
   res.set({
@@ -17,6 +21,9 @@ app.use((req, res, next) => {
   })
   if (process.env.NODE_ENV === 'production') {
     res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    if (!req.secure) {
+      return res.status(400).json({ status: 'fail', message: 'HTTPS is required' })
+    }
   }
   next()
 })

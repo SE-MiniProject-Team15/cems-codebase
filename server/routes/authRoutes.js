@@ -1,9 +1,12 @@
 const express = require('express')
 const { registerUser, loginUser } = require('../controllers/authController')
 const { protect } = require('../middleware/authMiddleware')
+const authRateLimit = require('../middleware/authRateLimit')
 const router = express.Router()
-router.post('/register', registerUser)
-router.post('/login', loginUser)
+
+router.post('/register', authRateLimit('register'), registerUser)
+router.post('/login', authRateLimit('login'), loginUser)
+
 router.post('/logout', (req, res) => {
   res.cookie('token', '', {
     httpOnly: true,
@@ -14,6 +17,7 @@ router.post('/logout', (req, res) => {
   })
   return res.status(200).json({ status: 'success', message: 'Logged out successfully' })
 })
+
 router.get('/me', protect, (req, res) => {
   return res.status(200).json({
     status: 'success',
@@ -27,4 +31,5 @@ router.get('/me', protect, (req, res) => {
     },
   })
 })
+
 module.exports = router

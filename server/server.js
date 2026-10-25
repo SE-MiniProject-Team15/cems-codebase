@@ -15,25 +15,71 @@ dotenv.config();
 
 const app = express();
 
+const trustedProxies = (process.env.TRUST_PROXY || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+if (trustedProxies.length) {
+  app.set('trust proxy', trustedProxies);
+}
+
+app.disable('x-powered-by');
+
+// Security headers and HTTPS enforcement in production.
+app.use((req, res, next) => {
+  res.set({
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  });
+
+  if (process.env.NODE_ENV === 'production') {
+    res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
+    if (!req.secure) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'HTTPS is required',
+      });
+    }
+  }
+
+  next();
+});
+
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 
+// Application routes
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/events', eventRouter);
 app.use('/api/notifications', notificationRouter);
 
+// Centralized error handler
 app.use((err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
+  const statusCode =
+    err.statusCode >= 400 && err.statusCode < 500
+      ? err.statusCode
+      : 500;
+
+  if (statusCode === 500) {
+    console.error('Request failed:', err);
+  }
 
   return res.status(statusCode).json({
     status: 'error',
-    message: err.message || 'Internal server error',
+    message:
+      statusCode === 500
+        ? 'Internal server error'
+        : err.message,
   });
 });
 
@@ -46,6 +92,13 @@ function validateEnvironment() {
       `Missing required environment variables: ${missing.join(', ')}`
     );
   }
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !process.env.CLIENT_URL?.startsWith('https://')
+  ) {
+    throw new Error('CLIENT_URL must use HTTPS in production');
+  }
 }
 
 async function startServer() {
@@ -57,6 +110,8 @@ async function startServer() {
 
     app.listen(port, () => {
       console.log(`Server listening on port ${port}`);
+
+      // Start the event reminder job after the server starts.
       startReminderJob();
     });
   } catch (error) {

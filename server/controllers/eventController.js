@@ -219,7 +219,7 @@ async function updateEvent(req, res, next) {
     };
 
     const isDraft =
-      req.body.status === 'Draft' || event.status === 'Draft';
+      req.body.status === 'Draft' || (req.body.status === undefined && event.status === 'Draft');
 
     const errors = validateEventDetails(nextDetails, isDraft);
 
@@ -403,22 +403,32 @@ async function listPublicEvents(req, res, next) {
       ],
     }).sort({ createdAt: -1 });
 
-    const publicEvents = events.map((event) => {
-      const item = event.toObject();
+    const toPublicEvent = (source, id) => {
+      const publicEvent = {
+        _id: id,
+        status: 'Approved',
+      };
 
-      if (
-        item.status === 'Pending Approval' &&
-        item.approvedSnapshot
-      ) {
-        return {
-          ...item,
-          ...item.approvedSnapshot,
-          _id: item._id,
-          status: 'Approved',
-        };
+      for (const field of DETAIL_FIELDS) {
+        if (source[field] !== undefined) {
+          publicEvent[field] = source[field];
+        }
       }
 
-      return item;
+      return publicEvent;
+    };
+
+    const publicEvents = events.map((event) => {
+      const current = event.toObject();
+
+      if (
+        current.status === 'Pending Approval' &&
+        current.approvedSnapshot
+      ) {
+        return toPublicEvent(current.approvedSnapshot, current._id);
+      }
+
+      return toPublicEvent(current, current._id);
     });
 
     return res.status(200).json({

@@ -66,7 +66,7 @@ function EventBrowser() {
           {events.map((item) => <article className="event-card" key={item.id}>
             {item.bannerUrl && <img className="event-banner" src={item.bannerUrl} alt="" loading="lazy" />}
             <div className="event-card-body"><p className="event-category">{item.category}</p><h2><Link to={'/events/' + item.id}>{item.title}</Link></h2><p className="event-summary">{item.description}</p>
-              <dl><div><dt>When</dt><dd>{dateTime(item.startAt)}</dd></div><div><dt>Where</dt><dd>{item.venue}</dd></div><div><dt>Department</dt><dd>{item.department}</dd></div></dl>
+              <dl><div><dt>When</dt><dd>{dateTime(item.startDateTime)}</dd></div><div><dt>Where</dt><dd>{item.venue}</dd></div><div><dt>Department</dt><dd>{item.department}</dd></div></dl>
               <p className="event-seats">{item.remainingSeats} seats remaining</p><Link className="event-link" to={'/events/' + item.id}>View details</Link>
             </div>
           </article>)}
@@ -96,7 +96,7 @@ function EventDetails() {
         {loading ? <p className="events-status">Loading event...</p> : error ? <p className="auth-error" role="alert">{error}</p> : event && <article>
           {event.bannerUrl && <img className="event-detail-banner" src={event.bannerUrl} alt="" />}
           <p className="event-category">{event.category}</p><h1>{event.title}</h1><p className="event-detail-description">{event.description}</p>
-          <dl className="event-facts"><div><dt>Starts</dt><dd>{dateTime(event.startAt)}</dd></div><div><dt>Ends</dt><dd>{dateTime(event.endAt)}</dd></div><div><dt>Venue</dt><dd>{event.venue}</dd></div><div><dt>Department</dt><dd>{event.department}</dd></div><div><dt>Registration deadline</dt><dd>{dateTime(event.registrationDeadline)}</dd></div><div><dt>Availability</dt><dd>{event.remainingSeats} seats remaining</dd></div></dl>
+          <dl className="event-facts"><div><dt>Starts</dt><dd>{dateTime(event.startDateTime)}</dd></div><div><dt>Ends</dt><dd>{dateTime(event.endDateTime)}</dd></div><div><dt>Venue</dt><dd>{event.venue}</dd></div><div><dt>Department</dt><dd>{event.department}</dd></div><div><dt>Registration deadline</dt><dd>{dateTime(event.registrationDeadline)}</dd></div><div><dt>Availability</dt><dd>{event.remainingSeats} seats remaining</dd></div></dl>
         </article>}
       </section>
     </main>

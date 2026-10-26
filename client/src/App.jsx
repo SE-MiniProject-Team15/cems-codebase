@@ -1,6 +1,9 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import OrganizerEvents from './pages/OrganizerEvents'
+import StudentEvents from './pages/StudentEvents'
+import AdminEventReview from './pages/AdminEventReview'
 import useAuth from './context/useAuth'
 import './App.css'
 
@@ -30,6 +33,9 @@ function Dashboard({ role }) {
         <p className="auth-eyebrow">College Event Management System</p>
         <h1>{role} dashboard</h1>
         <p>Welcome, {user.name}.</p>
+        {role === 'Student' && <Link to="/student/events">Explore events</Link>}
+        {role === 'Organizer' && <Link to="/organizer/events">Manage events</Link>}
+        {role === 'Admin' && <Link to="/admin/events/review">Review events</Link>}
         <button className="auth-button" type="button" onClick={logout}>Log out</button>
       </section>
     </main>
@@ -45,6 +51,9 @@ function App() {
       <Route path="/student/dashboard" element={<Dashboard role="Student" />} />
       <Route path="/organizer/dashboard" element={<Dashboard role="Organizer" />} />
       <Route path="/admin/dashboard" element={<Dashboard role="Admin" />} />
+      <Route path="/student/events" element={<StudentEvents />} />
+      <Route path="/organizer/events" element={<OrganizerEvents />} />
+      <Route path="/admin/events/review" element={<AdminEventReview />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

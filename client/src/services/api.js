@@ -18,4 +18,49 @@ export function logoutUser() {
 export function getCurrentUser() {
   return api.get('/auth/me').then(getPayload)
 }
+
+export function createEvent(data) {
+  return api.post('/events', data).then(getPayload)
+}
+
+export function getMyEvents() {
+  return api.get('/events/mine').then(getPayload)
+}
+
+export function updateEvent(id, data) {
+  return api.patch(`/events/${id}`, data).then(getPayload)
+}
+
+export function cancelEvent(id) {
+  return api.patch(`/events/${id}/cancel`).then(getPayload)
+}
+
+export function getPublicEvents() {
+  return api.get('/events/public').then(getPayload)
+}
+
+export function approveEvent(id) {
+  return api.patch(`/events/${id}/approve`).then(getPayload)
+}
+
+export function getPendingEvents() {
+  return api.get('/events/admin/pending').then(getPayload)
+}
+
+export function getPendingEventDetails(id) {
+  return api.get(`/events/admin/pending/${id}`).then(getPayload)
+}
+
+export function decideEvent(id, decision) {
+  return api.patch(`/events/admin/${id}/decision`, decision).then(getPayload)
+}
+
+export function getNotifications() {
+  return api.get('/notifications').then(getPayload)
+}
+
+export function markNotificationAsRead(id) {
+  return api.patch(`/notifications/${id}/read`).then(getPayload)
+}
+
 export default api

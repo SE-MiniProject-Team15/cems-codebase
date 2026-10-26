@@ -5,6 +5,9 @@ const cookieParser = require('cookie-parser')
 const connectDB = require('./config/db')
 const authRouter = require('./routes/authRoutes')
 const dashboardRouter = require('./routes/dashboardRoutes')
+const eventRouter = require('./routes/eventRoutes')
+const notificationRouter = require('./routes/notificationRoutes')
+const errorHandler = require('./middleware/errorHandler')
 dotenv.config()
 const app = express()
 app.use(cors({
@@ -15,13 +18,9 @@ app.use(express.json())
 app.use(cookieParser())
 app.use('/api/auth', authRouter)
 app.use('/api/dashboard', dashboardRouter)
-app.use((err, req, res, next) => {
-  const statusCode = err.statusCode || 500
-  return res.status(statusCode).json({
-    status: 'error',
-    message: err.message || 'Internal server error',
-  })
-})
+app.use('/api/events', eventRouter)
+app.use('/api/notifications', notificationRouter)
+app.use(errorHandler)
 function validateEnvironment() {
   const required = ['MONGO_URI', 'JWT_SECRET']
   const missing = required.filter((name) => !process.env[name])
@@ -38,7 +37,7 @@ async function startServer() {
       console.log(`Server listening on port ${port}`)
     })
   } catch (error) {
-    console.error('Failed to start server:', error.message)
+    console.error('Failed to start server:', error.name || 'Error')
     process.exitCode = 1
   }
 }

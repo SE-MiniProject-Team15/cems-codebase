@@ -61,7 +61,7 @@ async function registerUser(req, res) {
     if (error.name === 'ValidationError') {
       return res.status(400).json({ status: 'fail', message: 'Invalid registration details' })
     }
-    console.error('Registration failed:', error)
+    console.error('Registration failed:', error.name || 'Error')
     return res.status(500).json({ status: 'error', message: 'Unable to complete request' })
   }
 }
@@ -74,7 +74,7 @@ async function loginUser(req, res) {
 
   try {
     const email = submittedEmail.trim().toLowerCase()
-    const user = await User.findOne({ email }).select('+password loginAttempts lockUntil')
+    const user = await User.findOne({ email }).select('+password +loginAttempts +lockUntil')
     const authenticationFailure = { status: 'fail', message: 'Invalid email or password' }
     const now = Date.now()
 
@@ -111,7 +111,7 @@ async function loginUser(req, res) {
     setAuthCookie(res, token)
     return res.status(200).json({ status: 'success', data: { user: serializeUser(user) } })
   } catch (error) {
-    console.error('Login failed:', error)
+    console.error('Login failed:', error.name || 'Error')
     return res.status(500).json({ status: 'error', message: 'Unable to complete request' })
   }
 }

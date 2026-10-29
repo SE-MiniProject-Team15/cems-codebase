@@ -104,13 +104,14 @@ async function registerUser(req, res, next) {
         });
       }
     }
-
     const user = await User.create({
       name: name.trim(),
       email,
       password,
       role,
     });
+
+
     const token = jwt.sign(
       { id: user._id, role: user.role },
       getJwtSecret(),

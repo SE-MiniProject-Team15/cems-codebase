@@ -18,17 +18,16 @@ const DETAIL_FIELDS = [
 ];
 
 function eventDetails(source) {
-  const details = {};
-
-  for (const field of DETAIL_FIELDS) {
-    details[field] = source[field];
-  }
-
-  return details;
+  return Object.fromEntries(
+    DETAIL_FIELDS.map((field) => [field, source[field]])
+  );
 }
 
 function sendError(res, status, message) {
-  return res.status(status).json({ status: 'fail', message });
+  return res.status(status).json({
+    status: 'fail',
+    message,
+  });
 }
 
 function validateEventDetails(body, allowDraft = false) {
@@ -50,7 +49,11 @@ function validateEventDetails(body, allowDraft = false) {
   const end = new Date(body.endDateTime);
   const deadline = new Date(body.registrationDeadline);
 
-  if ([start, end, deadline].some((date) => Number.isNaN(date.getTime()))) {
+  if (
+    [start, end, deadline].some((date) =>
+      Number.isNaN(date.getTime())
+    )
+  ) {
     errors.push(
       'Start time, end time, and registration deadline must be valid dates'
     );
@@ -75,7 +78,10 @@ function validateEventDetails(body, allowDraft = false) {
     errors.push('Registration deadline must be in the future');
   }
 
-  if (!Number.isInteger(Number(body.capacity)) || Number(body.capacity) < 1) {
+  if (
+    !Number.isInteger(Number(body.capacity)) ||
+    Number(body.capacity) < 1
+  ) {
     errors.push('Capacity must be a positive whole number');
   }
 
@@ -95,23 +101,45 @@ function validateEventDetails(body, allowDraft = false) {
   return errors;
 }
 
+function escapeRegex(value) {
+  let escaped = '';
+
+  for (const character of value) {
+    if ('\\^$.*+?()[]{}|'.includes(character)) {
+      escaped += '\\';
+    }
+
+    escaped += character;
+  }
+
+  return escaped;
+}
+
 async function hasVenueConflict(details, excludeId) {
   const venue = String(details.venue || '').trim();
 
-  if (!venue || !details.startDateTime || !details.endDateTime) {
+  if (
+    !venue ||
+    !details.startDateTime ||
+    !details.endDateTime
+  ) {
     return false;
   }
 
   const venuePattern = new RegExp(
-    `^${venue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+    '^' + escapeRegex(venue) + '$',
     'i'
   );
 
   const query = {
     status: 'Approved',
     venue: venuePattern,
-    startDateTime: { $lt: new Date(details.endDateTime) },
-    endDateTime: { $gt: new Date(details.startDateTime) },
+    startDateTime: {
+      $lt: new Date(details.endDateTime),
+    },
+    endDateTime: {
+      $gt: new Date(details.startDateTime),
+    },
   };
 
   if (excludeId) {
@@ -121,14 +149,18 @@ async function hasVenueConflict(details, excludeId) {
   return Event.exists(query);
 }
 
-// Notification errors must not undo the event action.
 async function notifyUsers(notifications, emails = []) {
   try {
     if (notifications.length) {
-      await Notification.insertMany(notifications, { ordered: false });
+      await Notification.insertMany(notifications, {
+        ordered: false,
+      });
     }
   } catch (error) {
-    console.error('In-app notification creation failed:', error.message);
+    console.error(
+      'In-app notification creation failed:',
+      error.message
+    );
   }
 
   for (const email of emails) {
@@ -139,7 +171,10 @@ async function notifyUsers(notifications, emails = []) {
         email.message
       );
     } catch (error) {
-      console.error('Notification email failed:', error.message);
+      console.error(
+        'Notification email failed:',
+        error.message
+      );
     }
   }
 }
@@ -153,16 +188,15 @@ async function createEvent(req, res, next) {
       return sendError(res, 400, errors.join('; '));
     }
 
-    if (!isDraft) {
-      const conflict = await hasVenueConflict(req.body);
-
-      if (conflict) {
-        return sendError(
-          res,
-          409,
-          'This venue already has an overlapping approved event'
-        );
-      }
+    if (
+      !isDraft &&
+      await hasVenueConflict(req.body)
+    ) {
+      return sendError(
+        res,
+        409,
+        'This venue already has an overlapping approved event'
+      );
     }
 
     const event = await Event.create({
@@ -182,8 +216,9 @@ async function createEvent(req, res, next) {
 
 async function listMyEvents(req, res, next) {
   try {
-    const events = await Event.find({ organizer: req.user._id })
-      .sort({ updatedAt: -1 });
+    const events = await Event.find({
+      organizer: req.user._id,
+    }).sort({ updatedAt: -1 });
 
     return res.json({
       status: 'success',
@@ -210,7 +245,11 @@ async function updateEvent(req, res, next) {
     }
 
     if (event.status === 'Cancelled') {
-      return sendError(res, 400, 'Cancelled events cannot be edited');
+      return sendError(
+        res,
+        400,
+        'Cancelled events cannot be edited'
+      );
     }
 
     const nextDetails = {
@@ -219,32 +258,39 @@ async function updateEvent(req, res, next) {
     };
 
     const isDraft =
-      req.body.status === 'Draft' || (req.body.status === undefined && event.status === 'Draft');
+      req.body.status === 'Draft' ||
+      (
+        req.body.status === undefined &&
+        event.status === 'Draft'
+      );
 
-    const errors = validateEventDetails(nextDetails, isDraft);
+    const errors = validateEventDetails(
+      nextDetails,
+      isDraft
+    );
 
     if (errors.length) {
       return sendError(res, 400, errors.join('; '));
     }
 
-    if (!isDraft) {
-      const conflict = await hasVenueConflict(nextDetails, event._id);
-
-      if (conflict) {
-        return sendError(
-          res,
-          409,
-          'This venue already has an overlapping approved event'
-        );
-      }
+    if (
+      !isDraft &&
+      await hasVenueConflict(nextDetails, event._id)
+    ) {
+      return sendError(
+        res,
+        409,
+        'This venue already has an overlapping approved event'
+      );
     }
 
     const wasApproved = event.status === 'Approved';
     const previousTitle = event.title;
 
-    // Preserve the previously approved details for the public listing.
     if (wasApproved && !event.approvedSnapshot) {
-      event.approvedSnapshot = eventDetails(event.toObject());
+      event.approvedSnapshot = eventDetails(
+        event.toObject()
+      );
     }
 
     for (const field of DETAIL_FIELDS) {
@@ -254,19 +300,20 @@ async function updateEvent(req, res, next) {
     }
 
     event.status = isDraft ? 'Draft' : 'Pending Approval';
+
     await event.save();
 
-    if (wasApproved && event.registeredStudents.length > 0) {
-      const message =
-        `"${previousTitle}" has been updated and is awaiting reapproval.`;
-
-      const notifications = event.registeredStudents.map((studentId) => ({
-        recipient: studentId,
-        event: event._id,
-        type: 'EVENT_UPDATED',
-        title: 'Event updated',
-        message,
-      }));
+    if (wasApproved && event.registeredStudents.length) {
+      const notifications = event.registeredStudents.map(
+        (studentId) => ({
+          recipient: studentId,
+          event: event._id,
+          type: 'EVENT_UPDATED',
+          title: 'Event updated',
+          message:
+            `"${previousTitle}" has been updated and is awaiting reapproval.`,
+        })
+      );
 
       await notifyUsers(notifications);
     }
@@ -296,7 +343,11 @@ async function cancelEvent(req, res, next) {
     }
 
     if (event.status === 'Cancelled') {
-      return sendError(res, 400, 'Event is already cancelled');
+      return sendError(
+        res,
+        400,
+        'Event is already cancelled'
+      );
     }
 
     const wasApproved = event.status === 'Approved';
@@ -304,17 +355,17 @@ async function cancelEvent(req, res, next) {
     event.status = 'Cancelled';
     await event.save();
 
-    if (wasApproved && event.registeredStudents.length > 0) {
-      const message =
-        `"${event.title}" has been cancelled by the organizer.`;
-
-      const notifications = event.registeredStudents.map((studentId) => ({
-        recipient: studentId,
-        event: event._id,
-        type: 'EVENT_CANCELLED',
-        title: 'Event cancelled',
-        message,
-      }));
+    if (wasApproved && event.registeredStudents.length) {
+      const notifications = event.registeredStudents.map(
+        (studentId) => ({
+          recipient: studentId,
+          event: event._id,
+          type: 'EVENT_CANCELLED',
+          title: 'Event cancelled',
+          message:
+            `"${event.title}" has been cancelled by the organizer.`,
+        })
+      );
 
       await notifyUsers(notifications);
     }
@@ -357,9 +408,9 @@ async function approveEvent(req, res, next) {
       return sendError(res, 400, errors.join('; '));
     }
 
-    const conflict = await hasVenueConflict(event.toObject(), event._id);
-
-    if (conflict) {
+    if (
+      await hasVenueConflict(event.toObject(), event._id)
+    ) {
       return sendError(
         res,
         409,
@@ -368,7 +419,9 @@ async function approveEvent(req, res, next) {
     }
 
     event.status = 'Approved';
-    event.approvedSnapshot = eventDetails(event.toObject());
+    event.approvedSnapshot = eventDetails(
+      event.toObject()
+    );
 
     await event.save();
 
@@ -391,50 +444,511 @@ async function approveEvent(req, res, next) {
   }
 }
 
+const PUBLIC_EVENT_FILTER = {
+  $or: [
+    { status: 'Approved' },
+    {
+      status: 'Pending Approval',
+      approvedSnapshot: {
+        $exists: true,
+        $ne: null,
+      },
+    },
+  ],
+};
+
 async function listPublicEvents(req, res, next) {
   try {
-    const events = await Event.find({
-      $or: [
-        { status: 'Approved' },
-        {
-          status: 'Pending Approval',
-          approvedSnapshot: { $exists: true, $ne: null },
-        },
-      ],
-    }).sort({ createdAt: -1 });
-
-    const toPublicEvent = (source, id) => {
-      const publicEvent = {
-        _id: id,
-        status: 'Approved',
-      };
-
-      for (const field of DETAIL_FIELDS) {
-        if (source[field] !== undefined) {
-          publicEvent[field] = source[field];
-        }
-      }
-
-      return publicEvent;
-    };
+    const events = await Event.find(
+      PUBLIC_EVENT_FILTER
+    ).sort({ createdAt: -1 });
 
     const publicEvents = events.map((event) => {
-      const current = event.toObject();
+      const item = event.toObject();
 
       if (
-        current.status === 'Pending Approval' &&
-        current.approvedSnapshot
+        item.status === 'Pending Approval' &&
+        item.approvedSnapshot
       ) {
-        return toPublicEvent(current.approvedSnapshot, current._id);
+        return {
+          ...item,
+          ...item.approvedSnapshot.toObject(),
+          _id: item._id,
+          status: 'Approved',
+        };
       }
 
-      return toPublicEvent(current, current._id);
+      return item;
     });
 
     return res.status(200).json({
       status: 'success',
       results: publicEvents.length,
       data: { events: publicEvents },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function readString(value, field, maxLength) {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+
+  if (
+    typeof value !== 'string' ||
+    value.length > maxLength
+  ) {
+    const error = new Error(`${field} is invalid`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return value.trim();
+}
+
+function readDate(value, field, endOfDay = false) {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    const error = new Error(
+      `${field} must be a valid date`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error(
+      `${field} must be a valid date`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    endOfDay &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+
+  return date;
+}
+
+function readPage(value, fallback) {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const page = Number(value);
+
+  if (!Number.isInteger(page) || page < 1) {
+    const error = new Error(
+      'Page must be a positive integer'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return page;
+}
+
+function serializeEvent(item) {
+  const registrationCount =
+    item.registrationCount ??
+    (
+      Array.isArray(item.registeredStudents)
+        ? item.registeredStudents.length
+        : 0
+    );
+
+  return {
+    id: String(item._id),
+    title: item.title,
+    category: item.category,
+    description: item.description,
+    venue: item.venue,
+    department: item.department,
+    startDateTime: item.startDateTime,
+    endDateTime: item.endDateTime,
+    registrationDeadline: item.registrationDeadline,
+    capacity: item.capacity,
+    registrationCount,
+    remainingSeats: Math.max(
+      0,
+      (Number(item.capacity) || 0) - registrationCount
+    ),
+    bannerUrl: item.bannerUrl,
+  };
+}
+
+async function listEvents(req, res, next) {
+  try {
+    const search = readString(req.query.q, 'Search', 100);
+    const category = readString(
+      req.query.category,
+      'Category',
+      80
+    );
+    const venue = readString(
+      req.query.venue,
+      'Venue',
+      160
+    );
+    const department = readString(
+      req.query.department,
+      'Department',
+      120
+    );
+
+    const from = readDate(req.query.dateFrom, 'dateFrom');
+    const to = readDate(req.query.dateTo, 'dateTo', true);
+    const page = readPage(req.query.page, 1);
+    const limit = Math.min(
+      readPage(req.query.limit, 24),
+      50
+    );
+    const sort = req.query.sort;
+
+    if (from && to && from > to) {
+      const error = new Error(
+        'dateFrom must be before dateTo'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (
+      sort !== undefined &&
+      !['date', 'popular'].includes(sort)
+    ) {
+      const error = new Error(
+        'Sort must be date or popular'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const useSnapshot = {
+      $and: [
+        { $eq: ['$status', 'Pending Approval'] },
+        {
+          $ne: [
+            { $ifNull: ['$approvedSnapshot', null] },
+            null,
+          ],
+        },
+      ],
+    };
+
+    const pipeline = [
+      { $match: PUBLIC_EVENT_FILTER },
+      {
+        $set: {
+          title: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.title',
+              '$title',
+            ],
+          },
+          category: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.category',
+              '$category',
+            ],
+          },
+          description: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.description',
+              '$description',
+            ],
+          },
+          venue: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.venue',
+              '$venue',
+            ],
+          },
+          department: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.department',
+              '$department',
+            ],
+          },
+          startDateTime: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.startDateTime',
+              '$startDateTime',
+            ],
+          },
+          endDateTime: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.endDateTime',
+              '$endDateTime',
+            ],
+          },
+          registrationDeadline: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.registrationDeadline',
+              '$registrationDeadline',
+            ],
+          },
+          capacity: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.capacity',
+              '$capacity',
+            ],
+          },
+          bannerUrl: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.bannerUrl',
+              '$bannerUrl',
+            ],
+          },
+          registrationCount: {
+            $size: {
+              $ifNull: ['$registeredStudents', []],
+            },
+          },
+        },
+      },
+    ];
+
+    const filters = {};
+
+    if (search) {
+      const pattern = new RegExp(
+        escapeRegex(search),
+        'i'
+      );
+
+      filters.$or = [
+        { title: pattern },
+        { description: pattern },
+      ];
+    }
+
+    if (category) {
+      filters.category = new RegExp(
+        `^${escapeRegex(category)}$`,
+        'i'
+      );
+    }
+
+    if (venue) {
+      filters.venue = new RegExp(
+        `^${escapeRegex(venue)}$`,
+        'i'
+      );
+    }
+
+    if (department) {
+      filters.department = new RegExp(
+        `^${escapeRegex(department)}$`,
+        'i'
+      );
+    }
+
+    const startDate = {};
+
+    if (from) startDate.$gte = from;
+    if (to) startDate.$lte = to;
+
+    if (!from && !to) {
+      startDate.$gte = new Date();
+    }
+
+    filters.startDateTime = startDate;
+
+    pipeline.push({ $match: filters });
+
+    const ordering =
+      sort === 'popular'
+        ? {
+            registrationCount: -1,
+            startDateTime: 1,
+          }
+        : { startDateTime: 1 };
+
+    pipeline.push({
+      $facet: {
+        events: [
+          { $sort: ordering },
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          {
+            $project: {
+              _id: 1,
+              title: 1,
+              category: 1,
+              description: 1,
+              venue: 1,
+              department: 1,
+              startDateTime: 1,
+              endDateTime: 1,
+              registrationDeadline: 1,
+              capacity: 1,
+              registrationCount: 1,
+              bannerUrl: 1,
+            },
+          },
+        ],
+        metadata: [{ $count: 'total' }],
+      },
+    });
+
+    const [result] = await Event.aggregate(pipeline);
+    const total = result.metadata[0]?.total || 0;
+
+    return res.json({
+      status: 'success',
+      data: {
+        events: result.events.map(serializeEvent),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function getEvent(req, res, next) {
+  try {
+    if (!mongoose.isValidObjectId(req.params.eventId)) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const [event] = await Event.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(
+            req.params.eventId
+          ),
+          ...PUBLIC_EVENT_FILTER,
+        },
+      },
+      {
+        $set: {
+          title: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.title',
+              '$title',
+            ],
+          },
+          category: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.category',
+              '$category',
+            ],
+          },
+          description: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.description',
+              '$description',
+            ],
+          },
+          venue: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.venue',
+              '$venue',
+            ],
+          },
+          department: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.department',
+              '$department',
+            ],
+          },
+          startDateTime: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.startDateTime',
+              '$startDateTime',
+            ],
+          },
+          endDateTime: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.endDateTime',
+              '$endDateTime',
+            ],
+          },
+          registrationDeadline: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.registrationDeadline',
+              '$registrationDeadline',
+            ],
+          },
+          capacity: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.capacity',
+              '$capacity',
+            ],
+          },
+          bannerUrl: {
+            $cond: [
+              { $eq: ['$status', 'Pending Approval'] },
+              '$approvedSnapshot.bannerUrl',
+              '$bannerUrl',
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          title: 1,
+          category: 1,
+          description: 1,
+          venue: 1,
+          department: 1,
+          startDateTime: 1,
+          endDateTime: 1,
+          registrationDeadline: 1,
+          capacity: 1,
+          registeredStudents: 1,
+          bannerUrl: 1,
+        },
+      },
+    ]);
+
+    if (!event) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        event: serializeEvent(event),
+      },
     });
   } catch (error) {
     return next(error);
@@ -448,4 +962,6 @@ module.exports = {
   cancelEvent,
   approveEvent,
   listPublicEvents,
+  listEvents,
+  getEvent,
 };

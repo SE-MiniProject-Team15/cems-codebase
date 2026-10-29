@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import useAuth from '../context/useAuth'
@@ -13,23 +14,37 @@ function Register() {
     event.preventDefault()
     setFormError('')
 
-    const formData = new FormData(event.currentTarget)
-    const password = formData.get('password')
+    const form = event.currentTarget
+    const formData = new FormData(form)
+
+    const name = formData.get('name')?.toString().trim()
+    const email = formData.get('email')?.toString().trim()
+    const password = formData.get('password')?.toString() ?? ''
+    const role = formData.get('role')?.toString() ?? 'Student'
+
+    if (!name || !email) {
+      setFormError('Please enter your name and email address.')
+      return
+    }
+
     if (!passwordPolicy.test(password)) {
-      setFormError('Password must be at least 8 characters and contain at least one letter and one digit.')
+      setFormError(
+        'Password must be at least 8 characters and contain at least one letter and one digit.'
+      )
       return
     }
 
     setSubmitting(true)
+
     try {
       await register({
-        name: formData.get('name'),
-        email: formData.get('email'),
+        name,
+        email,
         password,
-        role: formData.get('role'),
+        role,
       })
     } catch {
-      // The auth context exposes the backend error for display.
+      // The authentication context exposes the backend error.
     } finally {
       setSubmitting(false)
     }
@@ -38,9 +53,15 @@ function Register() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <p className="auth-eyebrow">College Event Management System</p>
+        <p className="auth-eyebrow">
+          College Event Management System
+        </p>
+
         <h1>Create your account</h1>
-        <p className="auth-description">Join your campus community and discover upcoming events.</p>
+
+        <p className="auth-description">
+          Join your campus community and discover upcoming events.
+        </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="register-name">Name</label>
@@ -70,18 +91,32 @@ function Register() {
             minLength={8}
             required
           />
-          <p className="auth-hint">At least 8 characters, including a letter and a number.</p>
+
+          <p className="auth-hint">
+            At least 8 characters, including a letter and a number.
+          </p>
 
           <label htmlFor="register-role">Role</label>
-          <select id="register-role" name="role" defaultValue="Student">
+          <select
+            id="register-role"
+            name="role"
+            defaultValue="Student"
+          >
             <option value="Student">Student</option>
             <option value="Organizer">Organizer</option>
           </select>
 
           {(formError || error) && (
-            <p className="auth-error" role="alert">{formError || error}</p>
+            <p className="auth-error" role="alert">
+              {formError || error}
+            </p>
           )}
-          <button className="auth-button" type="submit" disabled={submitting}>
+
+          <button
+            className="auth-button"
+            type="submit"
+            disabled={submitting}
+          >
             {submitting ? 'Creating account...' : 'Create account'}
           </button>
         </form>

@@ -1,4 +1,3 @@
-
 const express = require('express');
 const {
   createEvent,
@@ -7,24 +6,25 @@ const {
   cancelEvent,
   approveEvent,
   listPublicEvents,
+  listEvents,
+  getEvent,
 } = require('../controllers/eventController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// Publicly visible events must be approved.
+// Public browse remains the simple event-management listing; discovery is student-only.
 router.get('/public', listPublicEvents);
 
-// All routes below require authentication.
 router.use(protect);
 
-// Organizers can manage their own events.
 router.post('/', restrictTo('Organizer'), createEvent);
 router.get('/mine', restrictTo('Organizer'), listMyEvents);
 router.patch('/:id', restrictTo('Organizer'), updateEvent);
 router.patch('/:id/cancel', restrictTo('Organizer'), cancelEvent);
-
-// Admins can approve pending events.
 router.patch('/:id/approve', restrictTo('Admin'), approveEvent);
+
+router.get('/', restrictTo('Student'), listEvents);
+router.get('/:eventId', restrictTo('Student'), getEvent);
 
 module.exports = router;

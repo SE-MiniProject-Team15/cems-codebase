@@ -45,3 +45,12 @@ Verify that CEMS API response times meet the performance targets specified in NF
 ## 5. Conclusion
 
 Both endpoints met their respective response-time targets in the tests performed. Additional testing with populated event data and a controlled production-like environment is recommended.
+
+## Bottleneck Analysis and Resolution
+
+- The event-listing endpoint completed the 200-connection load test with an average response time of 659.77 ms and a maximum response time of 1,905 ms, remaining within the 3-second target.
+- The registration endpoint completed a single successful test request in 248.22 ms, remaining within the 2-second target.
+- No response-time bottleneck exceeding the specified targets was observed during these tests.
+- The event-listing test returned an empty event list. Further testing with populated event data is recommended to evaluate performance under realistic data conditions.
+- Registration was tested with a single request rather than concurrent registration requests. Concurrent registration testing remains a limitation because of the endpoint's rate-limiting protection.
+- No performance optimization was made because these tests did not establish a specific bottleneck requiring a code change.

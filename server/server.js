@@ -8,6 +8,7 @@ const connectDB = require('./config/db');
 const authRouter = require('./routes/authRoutes');
 const dashboardRouter = require('./routes/dashboardRoutes');
 const eventRouter = require('./routes/eventRoutes');
+const feedbackRouter = require('./routes/feedbackRoutes');
 const notificationRouter = require('./routes/notificationRoutes');
 const registrationRouter = require('./routes/registrationRoutes');
 const { startReminderJob } = require('./services/reminderJob');
@@ -61,6 +62,7 @@ app.use(cookieParser());
 // Application routes
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/events', feedbackRouter);
 app.use('/api/events', eventRouter);
 app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);

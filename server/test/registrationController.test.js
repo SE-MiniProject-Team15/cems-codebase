@@ -248,6 +248,34 @@ test('students can retrieve only their own active upcoming tickets and waitlist 
   assert.equal(res.payload.data.registrations[1].registrationCode, undefined);
 });
 
+test('registration history includes past events and attendance status only when requested', async (t) => {
+  const pastRegistration = makeRegistration(studentId, 'Registered');
+  pastRegistration.attendanceStatus = 'Present';
+  const event = makeEvent({
+    startDateTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+    endDateTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+    registrations: [pastRegistration],
+  });
+  installMocks(t, event);
+
+  const upcomingOnly = makeResponse();
+  await listMyRegistrations(
+    { user: { _id: studentId }, query: {} },
+    upcomingOnly,
+    (error) => { throw error; }
+  );
+  assert.equal(upcomingOnly.payload.data.registrations.length, 0);
+
+  const history = makeResponse();
+  await listMyRegistrations(
+    { user: { _id: studentId }, query: { includePast: 'true' } },
+    history,
+    (error) => { throw error; }
+  );
+  assert.equal(history.payload.data.registrations.length, 1);
+  assert.equal(history.payload.data.registrations[0].attendanceStatus, 'Present');
+});
+
 test('registration endpoints are restricted to authenticated Students', () => {
   const expectedEventRoutes = [
     ['/:eventId/register', 'post'],

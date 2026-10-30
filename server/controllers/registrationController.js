@@ -33,6 +33,7 @@ function registrationPayload(event, registration) {
     id: registration._id,
     eventId: event._id,
     status: registration.status,
+    attendanceStatus: registration.attendanceStatus,
     createdAt: registration.createdAt,
     ...(registrationCode && {
       registrationCode,
@@ -257,11 +258,15 @@ async function listMyRegistrations(req, res, next) {
       'registrations.status': { $in: ['Registered', 'Waitlisted'] },
     }).select('+registrations.registrationCode');
 
+    const includePast = req.query?.includePast === 'true';
     const now = new Date();
     const registrations = [];
     for (const event of events) {
       const details = getPublishedDetails(event);
-      if (event.status === 'Cancelled' || new Date(details.startDateTime) <= now) {
+      if (
+        event.status === 'Cancelled' ||
+        (!includePast && new Date(details.startDateTime) <= now)
+      ) {
         continue;
       }
 

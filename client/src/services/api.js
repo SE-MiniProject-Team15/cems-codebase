@@ -65,8 +65,20 @@ export function cancelRegistration(eventId) {
   return api.delete(`/events/${encodeURIComponent(eventId)}/register`).then(getPayload);
 }
 
-export function getMyRegistrations() {
-  return api.get('/registrations/me').then(getPayload);
+export function getMyRegistrations(options = {}) {
+  return api.get('/registrations/me', { params: options }).then(getPayload);
+}
+
+export function submitFeedback(eventId, data) {
+  return api.post(`/events/${encodeURIComponent(eventId)}/feedback`, data).then(getPayload);
+}
+
+export function getStudentFeedback(eventId) {
+  return api.get(`/events/${encodeURIComponent(eventId)}/feedback`).then(getPayload);
+}
+
+export function getEventFeedbackSummary(eventId) {
+  return api.get(`/events/${encodeURIComponent(eventId)}/feedback`).then(getPayload);
 }
 
 export function getNotifications() {

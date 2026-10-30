@@ -8,6 +8,7 @@ import {
   cancelEvent,
   getCurrentUser,
 } from '../services/api';
+import FeedbackSummary from '../components/FeedbackSummary';
 
 const emptyForm = {
   title: '',
@@ -77,6 +78,7 @@ function OrganizerEvents() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [feedbackEvent, setFeedbackEvent] = useState(null);
 
   // Load events when the user explicitly refreshes or saves a change.
   const loadEvents = useCallback(async () => {
@@ -429,6 +431,16 @@ function OrganizerEvents() {
               </p>
             )}
 
+            {event.endDateTime && new Date(event.endDateTime) <= new Date() && (
+              <button
+                className="auth-button secondary-button"
+                type="button"
+                onClick={() => setFeedbackEvent(event)}
+              >
+                View Feedback
+              </button>
+            )}
+
             {event.status !== 'Cancelled' && (
               <div className="event-actions">
                 <button
@@ -451,6 +463,13 @@ function OrganizerEvents() {
           </article>
         ))}
       </section>
+      {feedbackEvent && (
+        <FeedbackSummary
+          eventId={feedbackEvent._id}
+          eventTitle={feedbackEvent.title}
+          onClose={() => setFeedbackEvent(null)}
+        />
+      )}
     </main>
   );
 }

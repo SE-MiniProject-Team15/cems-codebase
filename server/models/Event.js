@@ -24,6 +24,12 @@ const eventRegistrationSchema = new mongoose.Schema({
     enum: ['Registered', 'Waitlisted', 'Cancelled'],
     required: true,
   },
+  attendanceStatus: {
+    type: String,
+    enum: ['Present', 'Absent'],
+    default: 'Absent',
+    required: true,
+  },
   registrationCode: {
     type: String,
     select: false,

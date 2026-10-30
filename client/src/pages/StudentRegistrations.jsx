@@ -3,6 +3,7 @@ import QRCode from 'qrcode'
 import { Link, Navigate } from 'react-router-dom'
 import useAuth from '../context/useAuth'
 import { cancelRegistration, getMyRegistrations } from '../services/api'
+import StudentFeedback from '../components/StudentFeedback'
 
 function formatDate(value) {
   return new Date(value).toLocaleString()
@@ -16,12 +17,13 @@ function StudentRegistrations() {
   const [cancellingId, setCancellingId] = useState(null)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [feedbackRegistration, setFeedbackRegistration] = useState(null)
 
   const loadRegistrations = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const response = await getMyRegistrations()
+      const response = await getMyRegistrations({ includePast: true })
       setRegistrations(response.data.registrations)
     } catch (requestError) {
       setError(
@@ -34,7 +36,7 @@ function StudentRegistrations() {
 
   useEffect(() => {
     let active = true
-    getMyRegistrations()
+    getMyRegistrations({ includePast: true })
       .then((response) => {
         if (active) setRegistrations(response.data.registrations)
       })
@@ -123,7 +125,7 @@ function StudentRegistrations() {
           <div>
             <p className="auth-eyebrow">Student</p>
             <h1>My registrations &amp; tickets</h1>
-            <p>Your upcoming confirmed registrations and waitlist places.</p>
+            <p>Your registrations, tickets, and feedback options for attended events.</p>
           </div>
           <button
             className="auth-button secondary-button"
@@ -141,7 +143,7 @@ function StudentRegistrations() {
         {!loading && !error && registrations.length === 0 && (
           <div className="events-empty">
             <h2>No upcoming registrations</h2>
-            <p>Browse approved events to register or join a waitlist.</p>
+            <p>Registrations and eligible past events will appear here.</p>
             <Link className="auth-button" to="/events">Explore events</Link>
           </div>
         )}
@@ -157,6 +159,10 @@ function StudentRegistrations() {
                   </Link>
                 </h2>
                 <p><strong>Status:</strong> {registration.status}</p>
+                {registration.event.endDateTime &&
+                  new Date(registration.event.endDateTime) <= new Date() && (
+                    <p><strong>Attendance:</strong> {registration.attendanceStatus}</p>
+                  )}
                 <p><strong>When:</strong> {formatDate(registration.event.startDateTime)}</p>
                 <p><strong>Where:</strong> {registration.event.venue}</p>
 
@@ -172,7 +178,19 @@ function StudentRegistrations() {
                   </div>
                 )}
 
-                <button
+                {registration.status === 'Registered' &&
+                  registration.attendanceStatus === 'Present' &&
+                  new Date(registration.event.endDateTime) <= new Date() && (
+                    <button
+                      className="auth-button"
+                      type="button"
+                      onClick={() => setFeedbackRegistration(registration)}
+                    >
+                      Leave Feedback
+                    </button>
+                  )}
+
+                {new Date(registration.event.startDateTime) > new Date() && <button
                   className="auth-button secondary-button"
                   type="button"
                   onClick={() => handleCancel(registration)}
@@ -183,12 +201,19 @@ function StudentRegistrations() {
                     : registration.status === 'Waitlisted'
                       ? 'Leave waitlist'
                       : 'Cancel registration'}
-                </button>
+                </button>}
               </article>
             ))}
           </div>
         )}
       </section>
+      {feedbackRegistration && (
+        <StudentFeedback
+          eventId={feedbackRegistration.event.id}
+          eventTitle={feedbackRegistration.event.title}
+          onClose={() => setFeedbackRegistration(null)}
+        />
+      )}
     </main>
   )
 }

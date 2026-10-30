@@ -187,5 +187,18 @@
 .event-detail-description { white-space:pre-wrap; line-height:1.7; color:var(--muted); }
 .event-facts { max-width:620px; margin-top:2rem; padding:1.25rem; border:1px solid var(--border); border-radius:1rem; background:var(--surface); }
 .event-dashboard-link { display:block; margin-bottom:.75rem; text-align:center; text-decoration:none; }
+.registration-actions { margin-top:1.5rem; padding:1.25rem; border:1px solid var(--border); border-radius:1rem; background:var(--surface); }
+.registration-actions h2 { margin-top:0; }
+.registration-success { margin:.75rem 0; padding:.75rem 1rem; border:1px solid #86efac; border-radius:.6rem; background:#f0fdf4; color:#166534; }
+.secondary-button { background:var(--surface); border:1px solid var(--border); color:var(--text); }
+.registration-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:1.25rem; }
+.registration-card { padding:1.25rem; border:1px solid var(--border); border-radius:1rem; background:var(--surface); }
+.registration-card h2 { margin:.4rem 0 .8rem; font-size:1.3rem; }
+.registration-card h2 a { color:inherit; text-decoration:none; }
+.registration-ticket { display:grid; justify-items:center; gap:.5rem; margin:1rem 0; padding:1rem; border:1px dashed var(--border); border-radius:.75rem; background:var(--bg); text-align:center; }
+.registration-ticket h3,.registration-ticket p { margin:0; }
+.registration-ticket img { width:min(220px,100%); height:auto; image-rendering:pixelated; }
+.registration-code { overflow-wrap:anywhere; font-size:.8rem; }
+.registration-card > .auth-button { width:100%; }
 @media (max-width:720px) { .event-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .event-search { grid-column:span 2; } .events-heading { align-items:start; flex-direction:column; } }
 @media (max-width:440px) { .event-filters { grid-template-columns:1fr; } .event-search { grid-column:auto; } .events-header { align-items:flex-start; } }

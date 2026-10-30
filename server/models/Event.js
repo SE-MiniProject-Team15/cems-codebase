@@ -13,6 +13,23 @@ const eventDetailsSchema = new mongoose.Schema({
   registrationDeadline: Date,
 }, { _id: false });
 
+const eventRegistrationSchema = new mongoose.Schema({
+  student: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+  },
+  status: {
+    type: String,
+    enum: ['Registered', 'Waitlisted', 'Cancelled'],
+    required: true,
+  },
+  registrationCode: {
+    type: String,
+    select: false,
+  },
+}, { timestamps: true });
+
 const eventSchema = new mongoose.Schema({
   title: { type: String, trim: true, required: function () { return this.status !== 'Draft'; } },
   category: { type: String, trim: true, required: function () { return this.status !== 'Draft'; } },
@@ -28,9 +45,20 @@ const eventSchema = new mongoose.Schema({
   status: { type: String, enum: ['Draft', 'Pending Approval', 'Approved', 'Cancelled'], default: 'Draft', index: true },
   approvedSnapshot: { type: eventDetailsSchema, default: undefined },
   registeredStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-}, { timestamps: true });
+  registrations: {
+    type: [eventRegistrationSchema],
+    default: [],
+  },
+}, {
+  timestamps: true,
+  optimisticConcurrency: true,
+});
 
 eventSchema.index({ venue: 1, startDateTime: 1, endDateTime: 1, status: 1 });
 eventSchema.index({ status: 1, startDateTime: 1, category: 1 });
+eventSchema.index(
+  { 'registrations.registrationCode': 1 },
+  { unique: true, sparse: true }
+);
 
 module.exports = mongoose.model('Event', eventSchema);

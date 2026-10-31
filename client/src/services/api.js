@@ -55,6 +55,14 @@ export function decideEvent(id, decision) {
   return api.patch(`/events/admin/${id}/decision`, decision).then(getPayload)
 }
 
+export function getEvents(params) {
+  return api.get('/events', { params }).then(getPayload)
+}
+
+export function getEvent(eventId) {
+  return api.get(`/events/${encodeURIComponent(eventId)}`).then(getPayload)
+}
+
 export function getNotifications() {
   return api.get('/notifications').then(getPayload)
 }

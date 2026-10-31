@@ -27,6 +27,13 @@ function errorHandler(error, req, res, next) {
     });
   }
 
+  if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500) {
+    return res.status(error.statusCode).json({
+      status: 'fail',
+      message: error.message,
+    });
+  }
+
   console.error('Unhandled request error:', error?.name || 'Error');
   return res.status(500).json({
     status: 'error',

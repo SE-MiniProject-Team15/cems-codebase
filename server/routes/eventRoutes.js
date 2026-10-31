@@ -10,6 +10,8 @@ const {
   getPendingEventDetails,
   decideEvent,
   listPublicEvents,
+  listEvents,
+  getEvent,
 } = require('../controllers/eventController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
@@ -34,5 +36,8 @@ router.patch('/admin/:id/decision', restrictTo('Admin'), decideEvent);
 
 // Retain the original approval route with the same guarded decision flow.
 router.patch('/:id/approve', restrictTo('Admin'), approveEvent);
+
+router.get('/', restrictTo('Student'), listEvents);
+router.get('/:eventId', restrictTo('Student'), getEvent);
 
 module.exports = router;

@@ -138,6 +138,20 @@ function validateEventDetails(body, allowDraft = false) {
   return errors;
 }
 
+function escapeRegex(value) {
+  let escaped = '';
+
+  for (const character of value) {
+    if ('\\^$.*+?()[]{}|'.includes(character)) {
+      escaped += '\\';
+    }
+
+    escaped += character;
+  }
+
+  return escaped;
+}
+
 async function hasVenueConflict(details, excludeId) {
   const venue = String(details.venue || '').trim();
 
@@ -288,7 +302,10 @@ async function updateEvent(req, res, next) {
 
     const wasApproved = event.status === 'Approved';
     const hasPublishedVersion = wasApproved || Boolean(event.approvedSnapshot);
-    const isDraft = !wasApproved && req.body.status === 'Draft';
+    const isDraft = !wasApproved && (
+      req.body.status === 'Draft' ||
+      (req.body.status === undefined && event.status === 'Draft')
+    );
 
     const errors = validateEventDetails(nextDetails, isDraft);
 
@@ -710,6 +727,480 @@ async function listPublicEvents(req, res, next) {
   }
 }
 
+const PUBLIC_EVENT_FILTER = {
+  $or: [
+    { status: 'Approved' },
+    {
+      status: { $in: ['Pending Approval', 'Rejected', 'Changes Requested', 'Draft'] },
+      approvedSnapshot: { $exists: true, $ne: null },
+    },
+  ],
+};
+
+function readString(value, field, maxLength) {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+
+  if (
+    typeof value !== 'string' ||
+    value.length > maxLength
+  ) {
+    const error = new Error(`${field} is invalid`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return value.trim();
+}
+
+function readDate(value, field, endOfDay = false) {
+  if (value === undefined || value === '') {
+    return undefined;
+  }
+
+  if (typeof value !== 'string') {
+    const error = new Error(
+      `${field} must be a valid date`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    const error = new Error(
+      `${field} must be a valid date`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    endOfDay &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    date.setUTCHours(23, 59, 59, 999);
+  }
+
+  return date;
+}
+
+function readPage(value, fallback) {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const page = Number(value);
+
+  if (!Number.isInteger(page) || page < 1) {
+    const error = new Error(
+      'Page must be a positive integer'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return page;
+}
+
+function serializeEvent(item) {
+  const registrationCount =
+    item.registrationCount ??
+    (
+      Array.isArray(item.registeredStudents)
+        ? item.registeredStudents.length
+        : 0
+    );
+
+  return {
+    id: String(item._id),
+    title: item.title,
+    category: item.category,
+    description: item.description,
+    venue: item.venue,
+    department: item.department,
+    startDateTime: item.startDateTime,
+    endDateTime: item.endDateTime,
+    registrationDeadline: item.registrationDeadline,
+    capacity: item.capacity,
+    registrationCount,
+    remainingSeats: Math.max(
+      0,
+      (Number(item.capacity) || 0) - registrationCount
+    ),
+    bannerUrl: item.bannerUrl,
+  };
+}
+
+async function listEvents(req, res, next) {
+  try {
+    const search = readString(req.query.q, 'Search', 100);
+    const category = readString(
+      req.query.category,
+      'Category',
+      80
+    );
+    const venue = readString(
+      req.query.venue,
+      'Venue',
+      160
+    );
+    const department = readString(
+      req.query.department,
+      'Department',
+      120
+    );
+
+    const from = readDate(req.query.dateFrom, 'dateFrom');
+    const to = readDate(req.query.dateTo, 'dateTo', true);
+    const page = readPage(req.query.page, 1);
+    const limit = Math.min(
+      readPage(req.query.limit, 24),
+      50
+    );
+    const sort = req.query.sort;
+
+    if (from && to && from > to) {
+      const error = new Error(
+        'dateFrom must be before dateTo'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (
+      sort !== undefined &&
+      !['date', 'popular'].includes(sort)
+    ) {
+      const error = new Error(
+        'Sort must be date or popular'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const useSnapshot = {
+      $and: [
+        { $ne: ['$status', 'Approved'] },
+        {
+          $ne: [
+            { $ifNull: ['$approvedSnapshot', null] },
+            null,
+          ],
+        },
+      ],
+    };
+
+    const pipeline = [
+      { $match: PUBLIC_EVENT_FILTER },
+      {
+        $set: {
+          title: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.title',
+              '$title',
+            ],
+          },
+          category: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.category',
+              '$category',
+            ],
+          },
+          description: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.description',
+              '$description',
+            ],
+          },
+          venue: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.venue',
+              '$venue',
+            ],
+          },
+          department: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.department',
+              '$department',
+            ],
+          },
+          startDateTime: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.startDateTime',
+              '$startDateTime',
+            ],
+          },
+          endDateTime: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.endDateTime',
+              '$endDateTime',
+            ],
+          },
+          registrationDeadline: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.registrationDeadline',
+              '$registrationDeadline',
+            ],
+          },
+          capacity: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.capacity',
+              '$capacity',
+            ],
+          },
+          bannerUrl: {
+            $cond: [
+              useSnapshot,
+              '$approvedSnapshot.bannerUrl',
+              '$bannerUrl',
+            ],
+          },
+          registrationCount: {
+            $size: {
+              $ifNull: ['$registeredStudents', []],
+            },
+          },
+        },
+      },
+    ];
+
+    const filters = {};
+
+    if (search) {
+      const pattern = new RegExp(
+        escapeRegex(search),
+        'i'
+      );
+
+      filters.$or = [
+        { title: pattern },
+        { description: pattern },
+      ];
+    }
+
+    if (category) {
+      filters.category = new RegExp(
+        `^${escapeRegex(category)}$`,
+        'i'
+      );
+    }
+
+    if (venue) {
+      filters.venue = new RegExp(
+        `^${escapeRegex(venue)}$`,
+        'i'
+      );
+    }
+
+    if (department) {
+      filters.department = new RegExp(
+        `^${escapeRegex(department)}$`,
+        'i'
+      );
+    }
+
+    const startDate = {};
+
+    if (from) startDate.$gte = from;
+    if (to) startDate.$lte = to;
+
+    if (!from && !to) {
+      startDate.$gte = new Date();
+    }
+
+    filters.startDateTime = startDate;
+
+    pipeline.push({ $match: filters });
+
+    const ordering =
+      sort === 'popular'
+        ? {
+            registrationCount: -1,
+            startDateTime: 1,
+          }
+        : { startDateTime: 1 };
+
+    pipeline.push({
+      $facet: {
+        events: [
+          { $sort: ordering },
+          { $skip: (page - 1) * limit },
+          { $limit: limit },
+          {
+            $project: {
+              _id: 1,
+              title: 1,
+              category: 1,
+              description: 1,
+              venue: 1,
+              department: 1,
+              startDateTime: 1,
+              endDateTime: 1,
+              registrationDeadline: 1,
+              capacity: 1,
+              registrationCount: 1,
+              bannerUrl: 1,
+            },
+          },
+        ],
+        metadata: [{ $count: 'total' }],
+      },
+    });
+
+    const [result] = await Event.aggregate(pipeline);
+    const total = result.metadata[0]?.total || 0;
+
+    return res.json({
+      status: 'success',
+      data: {
+        events: result.events.map(serializeEvent),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function getEvent(req, res, next) {
+  try {
+    if (!mongoose.isValidObjectId(req.params.eventId)) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const [event] = await Event.aggregate([
+      {
+        $match: {
+          _id: new mongoose.Types.ObjectId(
+            req.params.eventId
+          ),
+          ...PUBLIC_EVENT_FILTER,
+        },
+      },
+      {
+        $set: {
+          title: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.title',
+              '$title',
+            ],
+          },
+          category: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.category',
+              '$category',
+            ],
+          },
+          description: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.description',
+              '$description',
+            ],
+          },
+          venue: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.venue',
+              '$venue',
+            ],
+          },
+          department: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.department',
+              '$department',
+            ],
+          },
+          startDateTime: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.startDateTime',
+              '$startDateTime',
+            ],
+          },
+          endDateTime: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.endDateTime',
+              '$endDateTime',
+            ],
+          },
+          registrationDeadline: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.registrationDeadline',
+              '$registrationDeadline',
+            ],
+          },
+          capacity: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.capacity',
+              '$capacity',
+            ],
+          },
+          bannerUrl: {
+            $cond: [
+              { $ne: ['$status', 'Approved'] },
+              '$approvedSnapshot.bannerUrl',
+              '$bannerUrl',
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          title: 1,
+          category: 1,
+          description: 1,
+          venue: 1,
+          department: 1,
+          startDateTime: 1,
+          endDateTime: 1,
+          registrationDeadline: 1,
+          capacity: 1,
+          registeredStudents: 1,
+          bannerUrl: 1,
+        },
+      },
+    ]);
+
+    if (!event) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        event: serializeEvent(event),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   createEvent,
   listMyEvents,
@@ -720,4 +1211,6 @@ module.exports = {
   getPendingEventDetails,
   decideEvent,
   listPublicEvents,
+  listEvents,
+  getEvent,
 };

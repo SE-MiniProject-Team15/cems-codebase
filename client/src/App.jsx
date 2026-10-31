@@ -6,6 +6,7 @@ import StudentEvents from './pages/StudentEvents'
 import AdminEventReview from './pages/AdminEventReview'
 import Notifications from './pages/Notifications'
 import { EventBrowser, EventDetails } from './pages/Events'
+import StudentRegistrations from './pages/StudentRegistrations'
 import useAuth from './context/useAuth'
 import './App.css'
 
@@ -36,6 +37,7 @@ function Dashboard({ role }) {
         <h1>{role} dashboard</h1>
         <p>Welcome, {user.name}.</p>
         {role === 'Student' && <Link to="/events">Explore events</Link>}
+        {role === 'Student' && <Link to="/registrations">My registrations and tickets</Link>}
         {role === 'Organizer' && <Link to="/organizer/events">Manage events</Link>}
         {role === 'Admin' && <Link to="/admin/events/review">Review events</Link>}
         <Link to="/notifications">View notifications</Link>
@@ -60,6 +62,7 @@ function App() {
       <Route path="/notifications" element={<Notifications />} />
       <Route path="/events" element={<EventBrowser />} />
       <Route path="/events/:eventId" element={<EventDetails />} />
+      <Route path="/registrations" element={<StudentRegistrations />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

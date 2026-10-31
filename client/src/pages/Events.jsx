@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import useAuth from '../context/useAuth'
-import { getEvent, getEvents } from '../services/api'
+import {
+  cancelRegistration,
+  getEvent,
+  getEvents,
+  getMyRegistrations,
+  registerForEvent,
+} from '../services/api'
 
 const dateTime = (value) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 
@@ -83,24 +89,191 @@ function EventDetails() {
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [registration, setRegistration] = useState(null)
+  const [registrationLoading, setRegistrationLoading] = useState(true)
+  const [registrationSubmitting, setRegistrationSubmitting] = useState(false)
+  const [registrationError, setRegistrationError] = useState('')
+  const [registrationMessage, setRegistrationMessage] = useState('')
+
   useEffect(() => {
     let active = true
-    getEvent(eventId).then(({ data }) => { if (active) setEvent(data.event) })
-      .catch((err) => { if (active) setError(err.response?.data?.message || 'Could not load this event.') })
-      .finally(() => { if (active) setLoading(false) })
+
+    getEvent(eventId)
+      .then(({ data }) => {
+        if (active) setEvent(data.event)
+      })
+      .catch((err) => {
+        if (active) setError(err.response?.data?.message || 'Could not load this event.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    getMyRegistrations()
+      .then(({ data }) => {
+        if (active) {
+          setRegistration(
+            data.registrations.find((item) => item.event.id === eventId) || null
+          )
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setRegistrationError(
+            err.response?.data?.message || 'Could not check your registration status.'
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setRegistrationLoading(false)
+      })
+
     return () => { active = false }
   }, [eventId])
-  return <StudentOnly user={user} loading={authLoading}>
-    <main className="events-page"><header className="events-header"><Link className="events-brand" to="/events">CEMS</Link><Link to="/events">All events</Link></header>
-      <section className="events-content event-detail"><Link className="event-link" to="/events">← Back to events</Link>
-        {loading ? <p className="events-status">Loading event...</p> : error ? <p className="auth-error" role="alert">{error}</p> : event && <article>
-          {event.bannerUrl && <img className="event-detail-banner" src={event.bannerUrl} alt="" />}
-          <p className="event-category">{event.category}</p><h1>{event.title}</h1><p className="event-detail-description">{event.description}</p>
-          <dl className="event-facts"><div><dt>Starts</dt><dd>{dateTime(event.startDateTime)}</dd></div><div><dt>Ends</dt><dd>{dateTime(event.endDateTime)}</dd></div><div><dt>Venue</dt><dd>{event.venue}</dd></div><div><dt>Department</dt><dd>{event.department}</dd></div><div><dt>Registration deadline</dt><dd>{dateTime(event.registrationDeadline)}</dd></div><div><dt>Availability</dt><dd>{event.remainingSeats} seats remaining</dd></div></dl>
-        </article>}
-      </section>
-    </main>
-  </StudentOnly>
+
+  async function submitRegistration() {
+    setRegistrationSubmitting(true)
+    setRegistrationError('')
+    setRegistrationMessage('')
+    try {
+      const response = await registerForEvent(eventId)
+      const createdRegistration = response.data.registration
+      setRegistration(createdRegistration)
+      setRegistrationMessage(
+        response.data.notificationSaved === false
+          ? `${response.message} The confirmation notification could not be saved.`
+          : response.message
+      )
+      if (createdRegistration.status === 'Registered') {
+        setEvent((current) => ({
+          ...current,
+          remainingSeats: Math.max(0, current.remainingSeats - 1),
+        }))
+      }
+    } catch (requestError) {
+      setRegistrationError(
+        requestError.response?.data?.message || 'Could not register for this event.'
+      )
+    } finally {
+      setRegistrationSubmitting(false)
+    }
+  }
+
+  async function submitCancellation() {
+    setRegistrationSubmitting(true)
+    setRegistrationError('')
+    setRegistrationMessage('')
+    try {
+      const wasRegistered = registration.status === 'Registered'
+      const response = await cancelRegistration(eventId)
+      setRegistration(null)
+      setRegistrationMessage(
+        response.data.promotionNotificationSaved === false
+          ? `${response.message} The promoted student could not be notified.`
+          : response.message
+      )
+      if (wasRegistered && !response.data.promoted) {
+        setEvent((current) => ({
+          ...current,
+          remainingSeats: Math.min(current.capacity, current.remainingSeats + 1),
+        }))
+      }
+    } catch (requestError) {
+      setRegistrationError(
+        requestError.response?.data?.message || 'Could not cancel this registration.'
+      )
+    } finally {
+      setRegistrationSubmitting(false)
+    }
+  }
+
+  const registrationOpen = event &&
+    new Date(event.registrationDeadline) > new Date() &&
+    new Date(event.startDateTime) > new Date()
+
+  return (
+    <StudentOnly user={user} loading={authLoading}>
+      <main className="events-page">
+        <header className="events-header">
+          <Link className="events-brand" to="/events">CEMS</Link>
+          <div>
+            <Link to="/events">All events</Link>
+            <Link to="/registrations">My tickets</Link>
+          </div>
+        </header>
+        <section className="events-content event-detail">
+          <Link className="event-link" to="/events">← Back to events</Link>
+          {loading && <p className="events-status">Loading event...</p>}
+          {error && <p className="auth-error" role="alert">{error}</p>}
+          {event && (
+            <article>
+              {event.bannerUrl && (
+                <img className="event-detail-banner" src={event.bannerUrl} alt="" />
+              )}
+              <p className="event-category">{event.category}</p>
+              <h1>{event.title}</h1>
+              <p className="event-detail-description">{event.description}</p>
+              <dl className="event-facts">
+                <div><dt>Starts</dt><dd>{dateTime(event.startDateTime)}</dd></div>
+                <div><dt>Ends</dt><dd>{dateTime(event.endDateTime)}</dd></div>
+                <div><dt>Venue</dt><dd>{event.venue}</dd></div>
+                <div><dt>Department</dt><dd>{event.department}</dd></div>
+                <div><dt>Registration deadline</dt><dd>{dateTime(event.registrationDeadline)}</dd></div>
+                <div><dt>Availability</dt><dd>{event.remainingSeats} seats remaining</dd></div>
+              </dl>
+
+              <section className="registration-actions" aria-label="Event registration">
+                <h2>Your registration</h2>
+                {registrationLoading && <p>Checking registration status...</p>}
+                {registrationError && <p className="auth-error" role="alert">{registrationError}</p>}
+                {registrationMessage && <p className="registration-success" role="status">{registrationMessage}</p>}
+                {!registrationLoading && registration && (
+                  <div>
+                    <p>
+                      Status: <strong>{registration.status}</strong>
+                      {registration.status === 'Registered'
+                        ? ' — your ticket is ready.'
+                        : ' — you will be notified if a seat opens.'}
+                    </p>
+                    <button
+                      className="auth-button secondary-button"
+                      type="button"
+                      onClick={submitCancellation}
+                      disabled={registrationSubmitting || !registrationOpen}
+                    >
+                      {registrationSubmitting
+                        ? 'Cancelling...'
+                        : registration.status === 'Waitlisted'
+                          ? 'Leave waitlist'
+                          : 'Cancel registration'}
+                    </button>
+                  </div>
+                )}
+                {!registrationLoading && !registration && registrationOpen && (
+                  <button
+                    className="auth-button"
+                    type="button"
+                    onClick={submitRegistration}
+                    disabled={registrationSubmitting}
+                  >
+                    {registrationSubmitting
+                      ? 'Submitting...'
+                      : event.remainingSeats > 0
+                        ? 'Register for event'
+                        : 'Join waitlist'}
+                  </button>
+                )}
+                {!registrationLoading && !registration && !registrationOpen && (
+                  <p>Registration is closed for this event.</p>
+                )}
+                <p><Link to="/registrations">View all registrations and tickets</Link></p>
+              </section>
+            </article>
+          )}
+        </section>
+      </main>
+    </StudentOnly>
+  )
 }
 
 export { EventBrowser, EventDetails }

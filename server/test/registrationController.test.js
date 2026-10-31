@@ -159,7 +159,7 @@ test('approved event registration creates a unique code and QR payload', async (
   assert.equal(createdNotifications[0].type, 'REGISTRATION_CONFIRMATION');
 });
 
-test('a full event adds the student to the waitlist without creating a ticket', async (t) => {
+test('a full event adds the student to the waitlist and sends a notice without creating a ticket', async (t) => {
   const event = makeEvent({ registeredStudents: [otherStudentId] });
   const { createdNotifications } = installMocks(t, event);
 
@@ -169,7 +169,8 @@ test('a full event adds the student to the waitlist without creating a ticket', 
   assert.equal(res.payload.data.registration.status, 'Waitlisted');
   assert.equal(res.payload.data.registration.registrationCode, undefined);
   assert.equal(event.registeredStudents.length, 1);
-  assert.equal(createdNotifications.length, 0);
+  assert.equal(createdNotifications.length, 1);
+  assert.equal(createdNotifications[0].type, 'WAITLIST_JOINED');
 });
 
 test('duplicate active registration and expired registration deadline are rejected', async (t) => {

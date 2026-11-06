@@ -23,6 +23,39 @@ function eventDetails(source) {
   );
 }
 
+const PUBLIC_EVENT_PROJECTION = [
+  '_id',
+  ...DETAIL_FIELDS,
+  'organizer',
+  'status',
+  'approvedSnapshot',
+].join(' ');
+
+function publicEventSnapshot(snapshot) {
+  if (!snapshot) return undefined;
+
+  const source = typeof snapshot.toObject === 'function'
+    ? snapshot.toObject()
+    : snapshot;
+
+  return eventDetails(source);
+}
+
+function serializePublicEvent(event) {
+  const item = event.toObject();
+  const approvedSnapshot = publicEventSnapshot(item.approvedSnapshot);
+  const useSnapshot = item.status === 'Pending Approval' &&
+    approvedSnapshot;
+
+  return {
+    _id: item._id,
+    ...eventDetails(useSnapshot || item),
+    organizer: item.organizer?._id ?? item.organizer,
+    status: useSnapshot ? 'Approved' : item.status,
+    ...(approvedSnapshot ? { approvedSnapshot } : {}),
+  };
+}
+
 function sendError(res, status, message) {
   return res.status(status).json({
     status: 'fail',
@@ -461,25 +494,8 @@ async function listPublicEvents(req, res, next) {
   try {
     const events = await Event.find(
       PUBLIC_EVENT_FILTER
-    ).sort({ createdAt: -1 });
-
-    const publicEvents = events.map((event) => {
-      const item = event.toObject();
-
-      if (
-        item.status === 'Pending Approval' &&
-        item.approvedSnapshot
-      ) {
-        return {
-          ...item,
-          ...item.approvedSnapshot.toObject(),
-          _id: item._id,
-          status: 'Approved',
-        };
-      }
-
-      return item;
-    });
+    ).select(PUBLIC_EVENT_PROJECTION).sort({ createdAt: -1 });
+    const publicEvents = events.map(serializePublicEvent);
 
     return res.status(200).json({
       status: 'success',

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getStudentFeedback, submitFeedback } from '../services/api'
+import useDialogAccessibility from './useDialogAccessibility'
 
 function StudentFeedback({ eventId, eventTitle, onClose }) {
+  const dialogRef = useDialogAccessibility(onClose)
   const [feedback, setFeedback] = useState(null)
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
@@ -58,10 +60,12 @@ function StudentFeedback({ eventId, eventTitle, onClose }) {
   return (
     <div className="feedback-backdrop">
       <section
+        ref={dialogRef}
         className="feedback-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="student-feedback-title"
+        tabIndex={-1}
       >
         <button className="feedback-close" type="button" onClick={onClose} aria-label="Close feedback">
           ×

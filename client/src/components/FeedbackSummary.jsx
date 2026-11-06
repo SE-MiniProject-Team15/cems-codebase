@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { getEventFeedbackSummary } from '../services/api'
+import useDialogAccessibility from './useDialogAccessibility'
 
 function FeedbackSummary({ eventId, eventTitle, onClose }) {
+  const dialogRef = useDialogAccessibility(onClose)
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -31,10 +33,12 @@ function FeedbackSummary({ eventId, eventTitle, onClose }) {
   return (
     <div className="feedback-backdrop">
       <section
+        ref={dialogRef}
         className="feedback-modal feedback-summary-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-summary-title"
+        tabIndex={-1}
       >
         <button className="feedback-close" type="button" onClick={onClose} aria-label="Close feedback summary">
           ×

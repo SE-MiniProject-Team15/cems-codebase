@@ -25,6 +25,7 @@ async function mockApi(page, role = 'Student', options = {}) {
     if (path === '/api/events') data = { events: [campusEvent], pagination: { total: 1, totalPages: 1, page: 1 } }
     if (path === '/api/events/mine' || path === '/api/events/public') data = { events: [campusEvent] }
     if (path === `/api/events/${campusEvent.id}`) data = { event: campusEvent }
+    if (path === '/api/registrations/me') data = { registrations: [{ id: 'reg-1', event: campusEvent, status: 'Registered', registrationCode: 'example-ticket-code', qrPayload: 'example-ticket-code' }] }
     if (path === '/api/notifications') data = { notifications: [{
       _id: 'notice-1', title: 'Event update', message: 'The workshop venue has changed.', read: false,
       createdAt: '2026-10-30T10:00:00Z',
@@ -54,6 +55,7 @@ const pages = [
   ['/events', 'Student', 'Find your next campus event'],
   [`/events/${campusEvent.id}`, 'Student', campusEvent.title],
   ['/organizer/events', 'Organizer', 'Manage your events'],
+  ['/registrations', 'Student', 'My registrations & tickets'],
   ['/notifications', 'Student', 'Notifications'],
   ['/student/events', 'Student', 'Explore Events'],
 ]

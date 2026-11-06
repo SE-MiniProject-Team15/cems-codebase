@@ -1,5 +1,32 @@
 # Purvi's FR-05 and FR-08 review
 
+
+## Follow-up verification — 2026-11-06
+
+The original findings below are historical. FR-05 is now merged into main; FR-08 PR #7 is closed without merging. There are no open review requests for DarthCoder01 among the repository's current open PRs.
+
+| Scope | Reviewed revision | Result |
+| --- | --- | --- |
+| FR-05 privacy correction | `0c132a4` included in main `c16cff2` | Public endpoint omits registrations, registered students and attendance; latest main's 15 server tests pass |
+| FR-08 corrections | `69d83d6dd2121f9463061aadb8ef26b900feaf2a` | All 20 server tests, client lint and build pass; public response omits private records |
+| Both FR-08 dialogs | Same revision | Initial focus enters dialog; 12 forward and 12 backward Tab steps stay inside; Escape closes; focus returns to opener |
+
+Verification scripts use the actual Express route with mocked database queries and the rendered React components with API fixtures:
+
+```sh
+node docs/reviews/verify-public-registration-privacy.cjs .
+node docs/reviews/verify-public-registration-privacy.cjs /tmp/cems-fr08-current
+# Start the FR-08 client on port 4174 before running:
+node docs/reviews/verify-dialog-focus.mjs
+node docs/reviews/verify-dialog-focus.mjs http://127.0.0.1:4174 summary
+```
+
+The original privacy and keyboard findings are resolved in the inspected revisions. This does not certify live MongoDB concurrency or reopen the closed feedback PR. The original reproduction scripts intentionally assert the old faulty behavior and should only be run against the original revisions below.
+
+Your FR-03 and FR-07 PRs were also integrated with main and checked: 44 and 47 server tests respectively, plus client lint/build. Integration exposed a public serialization regression for rejected/changes-requested drafts; both branches now preserve the approved snapshot in all review states and test those states. Both PRs were pushed and their CI passed.
+
+## Original review — 2026-11-02
+
 Reviewed on 2026-11-02 against the SRS sections FR-05, FR-08, NFR-03 and security objective SO-1, and documentation issues [#7](https://github.com/SE-MiniProject-Team15/project-documentation/issues/7) and [#11](https://github.com/SE-MiniProject-Team15/project-documentation/issues/11).
 
 | Pull request | Exact reviewed head | Recommendation |

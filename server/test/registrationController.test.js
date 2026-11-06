@@ -5,6 +5,7 @@ const Event = require('../models/Event');
 const Notification = require('../models/Notification');
 const eventRoutes = require('../routes/eventRoutes');
 const registrationRoutes = require('../routes/registrationRoutes');
+const { listPublicEvents } = require('../controllers/eventController');
 const {
   registerForEvent,
   cancelRegistration,
@@ -247,6 +248,132 @@ test('students can retrieve only their own active upcoming tickets and waitlist 
   ));
   assert.equal(res.payload.data.registrations[0].registrationCode, 'a'.repeat(64));
   assert.equal(res.payload.data.registrations[1].registrationCode, undefined);
+});
+
+test('public events and published snapshots omit registration and attendance records', async (t) => {
+  const publicStudentId = new mongoose.Types.ObjectId();
+  const publicEventId = new mongoose.Types.ObjectId();
+  const organizerId = new mongoose.Types.ObjectId();
+  const details = {
+    title: 'Public workshop',
+    category: 'Workshop',
+    description: 'A public event',
+    venue: 'Main Hall',
+    department: 'Engineering',
+    startDateTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
+    endDateTime: new Date(Date.now() + 3 * 60 * 60 * 1000),
+    capacity: 30,
+    bannerUrl: '/workshop.png',
+    registrationDeadline: new Date(Date.now() + 60 * 60 * 1000),
+  };
+  const approvedEvent = {
+    _id: publicEventId,
+    ...details,
+    organizer: organizerId,
+    status: 'Approved',
+    registeredStudents: [publicStudentId],
+    registrations: [{
+      student: publicStudentId,
+      status: 'Registered',
+    }],
+    waitlist: [{ student: publicStudentId }],
+    attendanceRecords: [{
+      student: publicStudentId,
+      attendanceStatus: 'Present',
+    }],
+    approvedSnapshot: {
+      ...details,
+      registrations: [{ student: publicStudentId, status: 'Registered' }],
+      attendanceRecords: [{
+        student: publicStudentId,
+        attendanceStatus: 'Present',
+      }],
+    },
+    toObject() {
+      return this;
+    },
+  };
+  const publishedSnapshotEvent = {
+    _id: new mongoose.Types.ObjectId(),
+    ...details,
+    title: 'Unpublished edit',
+    organizer: organizerId,
+    status: 'Pending Approval',
+    registeredStudents: [publicStudentId],
+    registrations: [{
+      student: publicStudentId,
+      status: 'Registered',
+    }],
+    approvedSnapshot: {
+      ...details,
+      registrations: [{ student: publicStudentId, status: 'Registered' }],
+      attendanceRecords: [{
+        student: publicStudentId,
+        attendanceStatus: 'Present',
+      }],
+    },
+    toObject() {
+      return this;
+    },
+  };
+  const originalFind = Event.find;
+
+  t.after(() => {
+    Event.find = originalFind;
+  });
+
+  Event.find = () => ({
+    select(projection) {
+      assert.match(projection, /approvedSnapshot/);
+      assert.doesNotMatch(projection, /registrations|registeredStudents/);
+      return this;
+    },
+    sort: async () => [approvedEvent, publishedSnapshotEvent],
+  });
+
+  const res = makeResponse();
+  const publicEventsRoute = eventRoutes.stack.find(
+    (layer) => layer.route?.path === '/public' && layer.route.methods.get
+  )?.route;
+  assert.ok(publicEventsRoute);
+  assert.equal(publicEventsRoute.stack.length, 1);
+  assert.equal(publicEventsRoute.stack[0].handle, listPublicEvents);
+
+  await listPublicEvents({}, res, (error) => {
+    throw error;
+  });
+
+  assert.equal(res.statusCode, 200);
+  const [approved, publishedSnapshot] = res.payload.data.events;
+  const allowedFields = new Set([
+    '_id',
+    ...Object.keys(details),
+    'organizer',
+    'status',
+    'approvedSnapshot',
+  ]);
+  for (const event of [approved, publishedSnapshot]) {
+    assert.ok(Object.keys(event).every((field) => allowedFields.has(field)));
+    assert.deepEqual(
+      Object.keys(event.approvedSnapshot).sort(),
+      Object.keys(details).sort()
+    );
+  }
+  assert.equal(approved.status, 'Approved');
+  assert.equal(publishedSnapshot.status, 'Approved');
+  assert.equal(publishedSnapshot.title, details.title);
+  assert.deepEqual(approved.approvedSnapshot, details);
+  assert.deepEqual(publishedSnapshot.approvedSnapshot, details);
+
+  const response = JSON.stringify(res.payload);
+  assert.doesNotMatch(
+    response,
+    new RegExp(String(publicStudentId))
+  );
+  assert.doesNotMatch(
+    response,
+    /registrations|registeredStudents|waitlist|attendanceRecords|attendanceStatus|Present/
+  );
 });
 
 test('registration endpoints are restricted to authenticated Students', () => {

@@ -81,7 +81,7 @@ test('saving edits to an approved event as a draft keeps its approved snapshot p
   })
   Event.findOne = async () => event
   Event.exists = async () => null
-  Event.find = () => ({ sort: async () => [event] })
+  Event.find = () => ({ select: () => ({ sort: async () => [event] }) })
   t.after(() => {
     Event.findOne = originalFindOne
     Event.exists = originalExists
@@ -111,9 +111,19 @@ test('saving edits to an approved event as a draft keeps its approved snapshot p
   const publicEvent = publicRes.payload.data.events[0]
   assert.equal(publicEvent.status, 'Approved')
   assert.equal(publicEvent.title, 'Published event')
-  assert.equal(publicEvent.organizer, undefined)
+  assert.equal(publicEvent.organizer, 'private-organizer-id')
   assert.equal(publicEvent.registeredStudents, undefined)
-  assert.equal(publicEvent.approvedSnapshot, undefined)
+  assert.equal(publicEvent.approvedSnapshot.title, 'Published event')
+  for (const status of ['Rejected', 'Changes Requested', 'Draft']) {
+    event.status = status
+    const snapshotRes = response()
+    await listPublicEvents({}, snapshotRes, (error) => { throw error })
+    const published = snapshotRes.payload.data.events[0]
+    assert.equal(published.status, 'Approved')
+    assert.equal(published.title, 'Published event')
+    assert.equal(published.registeredStudents, undefined)
+    assert.equal(published.registrations, undefined)
+  }
 })
 
 test('approval rolls back when its in-app notification could not be persisted', async (t) => {

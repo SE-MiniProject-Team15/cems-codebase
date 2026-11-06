@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom'
 const titles = {
   '/login': 'Log in',
   '/register': 'Create an account',
+  '/registrations': 'My registrations and tickets',
   '/events': 'Browse events',
   '/student/events': 'Student events',
   '/organizer/events': 'Manage events',

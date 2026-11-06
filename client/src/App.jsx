@@ -5,6 +5,7 @@ import OrganizerEvents from './pages/OrganizerEvents';
 import StudentEvents from './pages/StudentEvents';
 import Notifications from './pages/Notifications';
 import { EventBrowser, EventDetails } from './pages/Events';
+import StudentRegistrations from './pages/StudentRegistrations';
 import useAuth from './context/useAuth';
 import './App.css';
 import RouteAccessibility from './components/RouteAccessibility';
@@ -31,6 +32,7 @@ function Dashboard({ role }) {
         <h1>{role} Dashboard</h1>
         <p>Welcome, {user.name}.</p>
         {role === 'Student' && <Link className="auth-button" to="/events">Explore Events</Link>}
+        {role === 'Student' && <Link className="auth-button" to="/registrations">My Registrations &amp; Tickets</Link>}
         {role === 'Organizer' && <Link className="auth-button" to="/organizer/events">Manage Events</Link>}
         <Link className="auth-button" to="/notifications">View Notifications</Link>
         <button className="auth-button" type="button" onClick={logout}>Log out</button>
@@ -55,6 +57,7 @@ function App() {
       <Route path="/notifications" element={<Notifications />} />
       <Route path="/events" element={<EventBrowser />} />
       <Route path="/events/:eventId" element={<EventDetails />} />
+      <Route path="/registrations" element={<StudentRegistrations />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
     </>

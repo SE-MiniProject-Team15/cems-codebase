@@ -43,6 +43,39 @@ function reviewEventDetails(event) {
   };
 }
 
+const PUBLIC_EVENT_PROJECTION = [
+  '_id',
+  ...DETAIL_FIELDS,
+  'organizer',
+  'status',
+  'approvedSnapshot',
+].join(' ');
+
+function publicEventSnapshot(snapshot) {
+  if (!snapshot) return undefined;
+
+  const source = typeof snapshot.toObject === 'function'
+    ? snapshot.toObject()
+    : snapshot;
+
+  return eventDetails(source);
+}
+
+function serializePublicEvent(event) {
+  const item = event.toObject();
+  const approvedSnapshot = publicEventSnapshot(item.approvedSnapshot);
+  const useSnapshot = item.status !== 'Approved' &&
+    approvedSnapshot;
+
+  return {
+    _id: item._id,
+    ...eventDetails(useSnapshot || item),
+    organizer: item.organizer?._id ?? item.organizer,
+    status: useSnapshot ? 'Approved' : item.status,
+    ...(approvedSnapshot ? { approvedSnapshot } : {}),
+  };
+}
+
 function sendError(res, status, message) {
   return res.status(status).json({ status: 'fail', message });
 }
@@ -686,36 +719,10 @@ function approveEvent(req, res, next) {
 
 async function listPublicEvents(req, res, next) {
   try {
-    const events = await Event.find({
-      $or: [
-        { status: 'Approved' },
-        {
-          status: {
-            $in: [
-              'Pending Approval',
-              'Rejected',
-              'Changes Requested',
-              'Draft',
-            ],
-          },
-          approvedSnapshot: { $exists: true, $ne: null },
-        },
-      ],
-    }).sort({ createdAt: -1 });
-
-    const publicEvents = events.map((event) => {
-      const item = event.toObject();
-      const publicDetails =
-        item.status !== 'Approved' && item.approvedSnapshot
-          ? item.approvedSnapshot
-          : item;
-
-      return {
-        ...eventDetails(publicDetails),
-        _id: item._id,
-        status: 'Approved',
-      };
-    });
+    const events = await Event.find(
+      PUBLIC_EVENT_FILTER
+    ).select(PUBLIC_EVENT_PROJECTION).sort({ createdAt: -1 });
+    const publicEvents = events.map(serializePublicEvent);
 
     return res.status(200).json({
       status: 'success',

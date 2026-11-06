@@ -63,6 +63,18 @@ export function getEvent(eventId) {
   return api.get(`/events/${encodeURIComponent(eventId)}`).then(getPayload)
 }
 
+export function registerForEvent(eventId) {
+  return api.post(`/events/${encodeURIComponent(eventId)}/register`).then(getPayload);
+}
+
+export function cancelRegistration(eventId) {
+  return api.delete(`/events/${encodeURIComponent(eventId)}/register`).then(getPayload);
+}
+
+export function getMyRegistrations() {
+  return api.get('/registrations/me').then(getPayload);
+}
+
 export function getNotifications() {
   return api.get('/notifications').then(getPayload)
 }

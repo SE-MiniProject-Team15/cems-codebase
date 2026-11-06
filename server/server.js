@@ -9,6 +9,8 @@ const authRouter = require('./routes/authRoutes');
 const dashboardRouter = require('./routes/dashboardRoutes');
 const eventRouter = require('./routes/eventRoutes');
 const notificationRouter = require('./routes/notificationRoutes');
+const healthRouter = require('./routes/healthRoutes');
+const registrationRouter = require('./routes/registrationRoutes');
 const { startReminderJob } = require('./services/reminderJob');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -62,7 +64,9 @@ app.use(cookieParser());
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/events', eventRouter);
+app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/health', healthRouter);
 
 app.use(errorHandler);
 

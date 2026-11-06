@@ -1,13 +1,14 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
-import Login from './pages/Login'
-import Register from './pages/Register'
-import OrganizerEvents from './pages/OrganizerEvents'
-import StudentEvents from './pages/StudentEvents'
-import AdminEventReview from './pages/AdminEventReview'
-import Notifications from './pages/Notifications'
-import { EventBrowser, EventDetails } from './pages/Events'
-import useAuth from './context/useAuth'
-import './App.css'
+import AdminEventReview from './pages/AdminEventReview';
+import { Link, Navigate, Route, Routes } from 'react-router-dom';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import OrganizerEvents from './pages/OrganizerEvents';
+import StudentEvents from './pages/StudentEvents';
+import Notifications from './pages/Notifications';
+import { EventBrowser, EventDetails } from './pages/Events';
+import StudentRegistrations from './pages/StudentRegistrations';
+import useAuth from './context/useAuth';
+import './App.css';
 
 function Dashboard({ role }) {
   const { user, loading, logout } = useAuth()
@@ -35,10 +36,11 @@ function Dashboard({ role }) {
         <p className="auth-eyebrow">College Event Management System</p>
         <h1>{role} dashboard</h1>
         <p>Welcome, {user.name}.</p>
-        {role === 'Student' && <Link to="/events">Explore events</Link>}
-        {role === 'Organizer' && <Link to="/organizer/events">Manage events</Link>}
-        {role === 'Admin' && <Link to="/admin/events/review">Review events</Link>}
-        <Link to="/notifications">View notifications</Link>
+        {role === 'Student' && <Link className="auth-button" to="/events">Explore Events</Link>}
+        {role === 'Student' && <Link className="auth-button" to="/registrations">My Registrations &amp; Tickets</Link>}
+        {role === 'Organizer' && <Link className="auth-button" to="/organizer/events">Manage Events</Link>}
+        {role === 'Admin' && <Link className="auth-button" to="/admin/events/review">Review events</Link>}
+        <Link className="auth-button" to="/notifications">View Notifications</Link>
         <button className="auth-button" type="button" onClick={logout}>Log out</button>
       </section>
     </main>
@@ -60,6 +62,7 @@ function App() {
       <Route path="/notifications" element={<Notifications />} />
       <Route path="/events" element={<EventBrowser />} />
       <Route path="/events/:eventId" element={<EventDetails />} />
+      <Route path="/registrations" element={<StudentRegistrations />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   )

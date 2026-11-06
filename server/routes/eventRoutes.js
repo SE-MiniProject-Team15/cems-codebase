@@ -13,6 +13,10 @@ const {
   listEvents,
   getEvent,
 } = require('../controllers/eventController');
+const {
+  registerForEvent,
+  cancelRegistration,
+} = require('../controllers/registrationController');
 const { protect, restrictTo } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -38,6 +42,8 @@ router.patch('/admin/:id/decision', restrictTo('Admin'), decideEvent);
 router.patch('/:id/approve', restrictTo('Admin'), approveEvent);
 
 router.get('/', restrictTo('Student'), listEvents);
+router.post('/:eventId/register', restrictTo('Student'), registerForEvent);
+router.delete('/:eventId/register', restrictTo('Student'), cancelRegistration);
 router.get('/:eventId', restrictTo('Student'), getEvent);
 
 module.exports = router;

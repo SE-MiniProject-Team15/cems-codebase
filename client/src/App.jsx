@@ -7,11 +7,12 @@ import Notifications from './pages/Notifications';
 import { EventBrowser, EventDetails } from './pages/Events';
 import useAuth from './context/useAuth';
 import './App.css';
+import RouteAccessibility from './components/RouteAccessibility';
 
 function Dashboard({ role }) {
   const { user, loading, logout } = useAuth();
 
-  if (loading) return <main className="auth-page"><p>Loading your account...</p></main>;
+  if (loading) return <main id="main-content" tabIndex={-1} className="auth-page"><p>Loading your account...</p></main>;
   if (!user) return <Navigate to="/login" replace />;
 
   if (user.role !== role) {
@@ -24,7 +25,7 @@ function Dashboard({ role }) {
   }
 
   return (
-    <main className="auth-page">
+    <main id="main-content" tabIndex={-1} className="auth-page">
       <section className="auth-card dashboard-card">
         <p className="auth-eyebrow">College Event Management System</p>
         <h1>{role} Dashboard</h1>
@@ -40,6 +41,8 @@ function Dashboard({ role }) {
 
 function App() {
   return (
+    <>
+    <RouteAccessibility />
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
@@ -54,6 +57,7 @@ function App() {
       <Route path="/events/:eventId" element={<EventDetails />} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </>
   );
 }
 

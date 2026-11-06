@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import {
   createEvent,
@@ -77,6 +77,8 @@ function OrganizerEvents() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const formRef = useRef(null);
 
   // Load events when the user explicitly refreshes or saves a change.
   const loadEvents = useCallback(async () => {
@@ -193,6 +195,7 @@ function OrganizerEvents() {
   }
 
   function resetForm() {
+    setFieldErrors({});
     setForm(emptyForm);
     setEditingId(null);
   }
@@ -202,13 +205,37 @@ function OrganizerEvents() {
 
     if (busy) return;
 
+    setMessage('');
+    const errors = {};
+    if (!isDraft) {
+      for (const [name, label] of fields) {
+        if (!String(form[name]).trim()) errors[name] = `Enter ${label.toLowerCase()}.`;
+      }
+      const start = new Date(form.startDateTime);
+      const end = new Date(form.endDateTime);
+      const deadline = new Date(form.registrationDeadline);
+      if (form.startDateTime && (!Number.isFinite(start.getTime()) || start <= new Date())) errors.startDateTime = 'Choose a future start date and time.';
+      if (form.endDateTime && (!Number.isFinite(end.getTime()) || end <= start)) errors.endDateTime = 'Choose an end time after the start time.';
+      if (form.registrationDeadline && (!Number.isFinite(deadline.getTime()) || deadline <= new Date() || deadline >= start)) errors.registrationDeadline = 'Choose a future registration deadline before the event starts.';
+      if (!Number.isInteger(Number(form.capacity)) || Number(form.capacity) < 1) errors.capacity = 'Enter a whole number of seats greater than zero.';
+      if (form.bannerUrl && !formRef.current.elements.bannerUrl.validity.valid) errors.bannerUrl = 'Enter a complete image URL, such as https://example.com/banner.jpg.';
+    }
+    if (isDraft && form.capacity !== '' && (!Number.isInteger(Number(form.capacity)) || Number(form.capacity) < 1)) {
+      errors.capacity = 'Enter a whole number of seats greater than zero, or leave it blank for a draft.';
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      setError('Please correct the highlighted fields before submitting.');
+      formRef.current.elements[Object.keys(errors)[0]]?.focus();
+      return;
+    }
     setBusy(true);
     setError('');
     setMessage('');
 
     const payload = {
       ...form,
-      capacity: Number(form.capacity),
+      capacity: form.capacity === '' ? undefined : Number(form.capacity),
       status: isDraft ? 'Draft' : 'Pending Approval',
     };
 
@@ -238,15 +265,13 @@ function OrganizerEvents() {
   }
 
   function startEditing(event) {
+    setFieldErrors({});
     setEditingId(event._id);
     setForm(toFormData(event));
     setError('');
     setMessage('');
 
-    window.scrollTo({
-      top: 0,
-      behavior: 'smooth',
-    });
+    formRef.current?.elements.title?.focus();
   }
 
   async function handleCancel(id) {
@@ -273,7 +298,7 @@ function OrganizerEvents() {
 
   if (authLoading) {
     return (
-      <main className="auth-page">
+      <main id="main-content" tabIndex={-1} className="auth-page">
         <section className="auth-card">
           <p>Checking your login...</p>
         </section>
@@ -283,7 +308,7 @@ function OrganizerEvents() {
 
   if (authError) {
     return (
-      <main className="auth-page">
+      <main id="main-content" tabIndex={-1} className="auth-page">
         <section className="auth-card">
           <p className="auth-eyebrow">
             College Event Management System
@@ -310,7 +335,7 @@ function OrganizerEvents() {
   }
 
   return (
-    <main className="auth-page event-page">
+    <main id="main-content" tabIndex={-1} className="auth-page event-page">
       <section className="auth-card event-card">
         <p className="auth-eyebrow">
           College Event Management System
@@ -329,11 +354,12 @@ function OrganizerEvents() {
         </p>
 
         {message && <p role="status">{message}</p>}
-        {error && <p role="alert">{error}</p>}
+        {error && <p className="auth-error" role="alert">{error}</p>}
 
         <h2>{editingId ? 'Edit event' : 'Create an event'}</h2>
 
-        <form onSubmit={(event) => handleSubmit(event, false)}>
+        <p id="event-form-help">All fields are required to submit for approval. You can save an incomplete draft.</p>
+        <form ref={formRef} noValidate aria-describedby="event-form-help" aria-busy={busy} onSubmit={(event) => handleSubmit(event, false)}>
           {fields.map(([name, label, type]) => (
             <div className="event-field" key={name}>
               <label htmlFor={name}>{label}</label>
@@ -345,6 +371,9 @@ function OrganizerEvents() {
                   value={form[name]}
                   onChange={handleChange}
                   rows={4}
+                  required
+                  aria-invalid={Boolean(fieldErrors[name])}
+                  aria-describedby={fieldErrors[name] ? `${name}-error` : undefined}
                 />
               ) : (
                 <input
@@ -354,15 +383,12 @@ function OrganizerEvents() {
                   min={type === 'number' ? 1 : undefined}
                   value={form[name]}
                   onChange={handleChange}
-                  required={
-                    ![
-                      'description',
-                      'bannerUrl',
-                      'registrationDeadline',
-                    ].includes(name)
-                  }
+                  required
+                  aria-invalid={Boolean(fieldErrors[name])}
+                  aria-describedby={fieldErrors[name] ? `${name}-error` : undefined}
                 />
               )}
+              {fieldErrors[name] && <p className="field-error" id={`${name}-error`}>{fieldErrors[name]}</p>}
             </div>
           ))}
 
@@ -401,9 +427,9 @@ function OrganizerEvents() {
       <section className="auth-card event-card">
         <h2>Your events</h2>
 
-        {loading && <p>Loading events...</p>}
+        {loading && <p role="status">Loading events...</p>}
 
-        {!loading && events.length === 0 && (
+        {!loading && !error && events.length === 0 && (
           <p>You have not created any events yet.</p>
         )}
 

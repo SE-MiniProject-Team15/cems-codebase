@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "test": "node --test",
+    "backup": "node scripts/backup.js",
     "start": "node server.js"
   },
   "keywords": [],

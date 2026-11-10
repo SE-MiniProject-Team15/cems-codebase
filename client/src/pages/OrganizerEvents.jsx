@@ -429,6 +429,14 @@ function OrganizerEvents() {
               </p>
             )}
 
+            {event.status === 'Approved' && (
+              <p>
+                <Link className="event-link" to={`/organizer/events/${event._id}/attendance`}>
+                  Take attendance
+                </Link>
+              </p>
+            )}
+
             {event.status !== 'Cancelled' && (
               <div className="event-actions">
                 <button

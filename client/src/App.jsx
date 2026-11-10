@@ -4,6 +4,7 @@ import Register from './pages/Register';
 import OrganizerEvents from './pages/OrganizerEvents';
 import StudentEvents from './pages/StudentEvents';
 import Notifications from './pages/Notifications';
+import { AdminAttendance, OrganizerAttendance } from './pages/Attendance';
 import { EventBrowser, EventDetails } from './pages/Events';
 import StudentRegistrations from './pages/StudentRegistrations';
 import useAuth from './context/useAuth';
@@ -33,6 +34,7 @@ function Dashboard({ role }) {
         {role === 'Student' && <Link className="auth-button" to="/events">Explore Events</Link>}
         {role === 'Student' && <Link className="auth-button" to="/registrations">My Registrations &amp; Tickets</Link>}
         {role === 'Organizer' && <Link className="auth-button" to="/organizer/events">Manage Events</Link>}
+        {role === 'Admin' && <Link className="auth-button" to="/admin/attendance">View attendance</Link>}
         <Link className="auth-button" to="/notifications">View Notifications</Link>
         <button className="auth-button" type="button" onClick={logout}>Log out</button>
       </section>
@@ -51,6 +53,8 @@ function App() {
       <Route path="/admin/dashboard" element={<Dashboard role="Admin" />} />
       <Route path="/student/events" element={<StudentEvents />} />
       <Route path="/organizer/events" element={<OrganizerEvents />} />
+      <Route path="/organizer/events/:eventId/attendance" element={<OrganizerAttendance />} />
+      <Route path="/admin/attendance" element={<AdminAttendance />} />
       <Route path="/notifications" element={<Notifications />} />
       <Route path="/events" element={<EventBrowser />} />
       <Route path="/events/:eventId" element={<EventDetails />} />

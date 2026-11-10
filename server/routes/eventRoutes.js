@@ -8,6 +8,9 @@ const {
   listPublicEvents,
   listEvents,
   getEvent,
+  checkInStudent,
+  listAttendance,
+  listAttendanceOverview,
 } = require('../controllers/eventController');
 const {
   registerForEvent,
@@ -27,6 +30,9 @@ router.get('/mine', restrictTo('Organizer'), listMyEvents);
 router.patch('/:id', restrictTo('Organizer'), updateEvent);
 router.patch('/:id/cancel', restrictTo('Organizer'), cancelEvent);
 router.patch('/:id/approve', restrictTo('Admin'), approveEvent);
+router.get('/attendance/overview', restrictTo('Admin'), listAttendanceOverview);
+router.get('/:eventId/attendance', restrictTo('Organizer', 'Admin'), listAttendance);
+router.post('/:eventId/attendance/check-in', restrictTo('Organizer'), checkInStudent);
 
 router.get('/', restrictTo('Student'), listEvents);
 router.post('/:eventId/register', restrictTo('Student'), registerForEvent);

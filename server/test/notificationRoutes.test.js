@@ -24,10 +24,11 @@ function listHandler() {
 test('notification listing is scoped to the authenticated recipient', async (t) => {
   const originalFind = Notification.find
   let query
+  let ordering
   const notifications = [{ _id: 'notice-id', read: false }]
   Notification.find = (filter) => {
     query = filter
-    return { sort: async () => notifications }
+    return { sort: async (sort) => { ordering = sort; return notifications } }
   }
   t.after(() => { Notification.find = originalFind })
 
@@ -39,6 +40,7 @@ test('notification listing is scoped to the authenticated recipient', async (t) 
   )
 
   assert.deepEqual(query, { recipient: 'recipient-id' })
+  assert.deepEqual(ordering, { createdAt: -1, _id: -1 })
   assert.deepEqual(res.payload.data.notifications, notifications)
   assert.equal(res.payload.data.notifications[0].read, false)
 })

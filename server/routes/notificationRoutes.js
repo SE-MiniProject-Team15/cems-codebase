@@ -13,7 +13,7 @@ router.get('/', async (req, res, next) => {
   try {
     const notifications = await Notification.find({
       recipient: req.user._id,
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1, _id: -1 });
 
     return res.json({
       status: 'success',

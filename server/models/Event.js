@@ -1,21 +1,17 @@
-
 const mongoose = require('mongoose');
 
-const eventDetailsSchema = new mongoose.Schema(
-  {
-    title: String,
-    category: String,
-    description: String,
-    venue: String,
-    department: String,
-    startDateTime: Date,
-    endDateTime: Date,
-    capacity: Number,
-    bannerUrl: String,
-    registrationDeadline: Date,
-  },
-  { _id: false }
-);
+const eventDetailsSchema = new mongoose.Schema({
+  title: String,
+  category: String,
+  description: String,
+  venue: String,
+  department: String,
+  startDateTime: Date,
+  endDateTime: Date,
+  capacity: Number,
+  bannerUrl: String,
+  registrationDeadline: Date,
+}, { _id: false });
 
 const eventRegistrationSchema = new mongoose.Schema({
   student: {

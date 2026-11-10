@@ -3,7 +3,7 @@ const Event = require('../models/Event');
 const Notification = require('../models/Notification');
 const EventAuditLog = require('../models/EventAuditLog');
 const mongoose = require('mongoose');
-const { sendNotificationEmail } = require('../services/notificationService');
+const { sendEmailToUsers } = require('../services/notificationService');
 
 const DETAIL_FIELDS = [
   'title',
@@ -212,7 +212,7 @@ async function hasVenueConflict(details, excludeId) {
 }
 
 // Notification errors must not undo the event action.
-async function notifyUsers(notifications, emails = []) {
+async function notifyUsers(notifications) {
   let inAppNotificationsSaved = true;
 
   try {
@@ -224,16 +224,12 @@ async function notifyUsers(notifications, emails = []) {
     console.error('In-app notification persistence failed:', error.name || 'Error');
   }
 
-  for (const email of emails) {
-    try {
-      await sendNotificationEmail(
-        email.to,
-        email.subject,
-        email.message
-      );
-    } catch (error) {
-      console.error('Notification email failed:', error.name || 'Error');
-    }
+  if (notifications.length) {
+    await sendEmailToUsers(
+      notifications.map((item) => item.recipient),
+      notifications[0].title,
+      notifications[0].message
+    );
   }
 
   return { inAppNotificationsSaved };
@@ -439,15 +435,18 @@ async function cancelEvent(req, res, next) {
       return sendError(res, 400, 'Event is already cancelled');
     }
 
-    const wasApproved = event.status === 'Approved';
+    const wasPublished = event.status === 'Approved' || Boolean(event.approvedSnapshot);
+    const publishedTitle = event.status === 'Approved'
+      ? event.title
+      : event.approvedSnapshot?.title || event.title;
 
     event.status = 'Cancelled';
     await event.save();
 
     let notificationResult;
-    if (wasApproved && event.registeredStudents.length > 0) {
+    if (wasPublished && event.registeredStudents.length > 0) {
       const message =
-        `"${event.title}" has been cancelled by the organizer.`;
+        `"${publishedTitle}" has been cancelled by the organizer.`;
 
       const notifications = event.registeredStudents.map((studentId) => ({
         recipient: studentId,
@@ -462,7 +461,7 @@ async function cancelEvent(req, res, next) {
 
     return res.json({
       status: 'success',
-      message: !wasApproved
+      message: !wasPublished
         ? 'Event cancelled successfully.'
         : event.registeredStudents.length === 0
           ? 'Event cancelled; there were no registered students to notify.'
@@ -661,6 +660,12 @@ async function decideEvent(req, res, next) {
 
       result = { event, auditLog, notification };
     });
+
+    await sendEmailToUsers(
+      [result.event.organizer],
+      result.notification.title,
+      result.notification.message
+    );
 
     return res.json({
       status: 'success',

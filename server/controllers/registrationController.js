@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
 const Notification = require('../models/Notification');
+const { sendEmailToUsers } = require('../services/notificationService');
 
 const MAX_SAVE_ATTEMPTS = 5;
 
@@ -15,11 +16,11 @@ function isVersionConflict(error) {
 
 function isPubliclyApproved(event) {
   return event.status === 'Approved' ||
-    (event.status === 'Pending Approval' && Boolean(event.approvedSnapshot));
+    (event.status !== 'Cancelled' && Boolean(event.approvedSnapshot));
 }
 
 function getPublishedDetails(event) {
-  if (event.status === 'Pending Approval' && event.approvedSnapshot) {
+  if (event.status !== 'Approved' && event.approvedSnapshot) {
     return event.approvedSnapshot.toObject
       ? event.approvedSnapshot.toObject()
       : event.approvedSnapshot;
@@ -42,13 +43,16 @@ function registrationPayload(event, registration) {
 }
 
 async function notifyStudent(recipient, eventId, type, title, message) {
+  let saved = true;
   try {
     await Notification.create({ recipient, event: eventId, type, title, message });
-    return true;
   } catch (error) {
+    saved = false;
     console.error('Registration notification could not be saved:', error.name || 'Error');
-    return false;
   }
+
+  await sendEmailToUsers([recipient], title, message);
+  return saved;
 }
 
 async function findRegistrationEvent(eventId) {
@@ -129,7 +133,13 @@ async function registerForEvent(req, res, next) {
           'Registration confirmed',
           `Your registration for "${details.title}" is confirmed.`
         )
-        : true;
+        : await notifyStudent(
+          studentId,
+          event._id,
+          'WAITLIST_JOINED',
+          'Added to the waitlist',
+          `You are on the waitlist for "${details.title}".`
+        );
 
       return res.status(201).json({
         status: 'success',

@@ -3,67 +3,62 @@ const Event = require('../models/Event');
 const Notification = require('../models/Notification');
 const { sendNotificationEmail } = require('./notificationService');
 
-function startReminderJob() {
-  cron.schedule('*/5 * * * *', async () => {
-    try {
-      const now = new Date();
-      const lower = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-      const upper = new Date(lower.getTime() + 5 * 60 * 1000);
+const HOUR = 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const PUBLISHED_REVIEW_STATES = ['Pending Approval', 'Rejected', 'Changes Requested', 'Draft'];
 
-      const events = await Event.find({
-        status: 'Approved',
-        startDateTime: { $gte: lower, $lt: upper },
-      }).populate('registeredStudents', 'email name');
+async function runReminders(now = new Date()) {
+  const lower = new Date(now.getTime() + 24 * HOUR);
+  const upper = new Date(lower.getTime() + MINUTE);
 
-      for (const event of events) {
-        for (const student of event.registeredStudents || []) {
-          try {
-            const existing = await Notification.exists({
-              event: event._id,
-              recipient: student._id,
-              type: 'EVENT_REMINDER',
-            });
+  try {
+    const events = await Event.find({
+      $or: [
+        { status: 'Approved', startDateTime: { $gte: lower, $lt: upper } },
+        {
+          status: { $in: PUBLISHED_REVIEW_STATES },
+          approvedSnapshot: { $exists: true, $ne: null },
+          'approvedSnapshot.startDateTime': { $gte: lower, $lt: upper },
+        },
+      ],
+    }).populate('registeredStudents', 'email name');
 
-            if (existing) continue;
+    for (const event of events) {
+      const details = event.status === 'Approved' ? event : event.approvedSnapshot;
+      const scheduledFor = details.startDateTime;
 
-            const message =
-              `"${event.title}" starts in approximately 24 hours.`;
+      for (const student of event.registeredStudents || []) {
+        try {
+          const key = {
+            event: event._id,
+            recipient: student._id,
+            type: 'EVENT_REMINDER',
+            scheduledFor,
+          };
+          if (await Notification.exists(key)) continue;
 
-            await Notification.create({
-              recipient: student._id,
-              event: event._id,
-              type: 'EVENT_REMINDER',
-              title: 'Event reminder',
-              message,
-            });
-
-            // Email failures must not prevent in-app notifications.
-            try {
-              await sendNotificationEmail(
-                student.email,
-                `Reminder: ${event.title}`,
-                message
-              );
-            } catch (emailError) {
-              console.error(
-                'Reminder email failed:',
-                emailError.message
-              );
-            }
-          } catch (studentError) {
-            console.error(
-              'Could not create reminder for student:',
-              studentError.message
-            );
+          const message = `"${details.title}" starts in approximately 24 hours.`;
+          await Notification.create({
+            ...key,
+            title: 'Event reminder',
+            message,
+          });
+          await sendNotificationEmail(student.email, `Reminder: ${details.title}`, message);
+        } catch (error) {
+          if (error.code !== 11000) {
+            console.error('Could not create event reminder:', error.name || 'Error');
           }
         }
       }
-    } catch (error) {
-      console.error('Reminder job failed:', error.message);
     }
-  });
+  } catch (error) {
+    console.error('Reminder job failed:', error.name || 'Error');
+  }
+}
 
+function startReminderJob() {
+  cron.schedule('* * * * *', () => runReminders());
   console.log('Event reminder job scheduled.');
 }
 
-module.exports = { startReminderJob };
+module.exports = { runReminders, startReminderJob };

@@ -32,13 +32,13 @@ function Login() {
   }
 
   return (
-    <main className="auth-page">
+    <main id="main-content" tabIndex={-1} className="auth-page">
       <section className="auth-card">
         <p className="auth-eyebrow">College Event Management System</p>
         <h1>Welcome back</h1>
         <p className="auth-description">Log in to find and manage campus events.</p>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form aria-busy={submitting} className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="login-email">Email</label>
           <input
             id="login-email"

@@ -32,6 +32,12 @@ const eventRegistrationSchema = new mongoose.Schema({
     type: String,
     select: false,
   },
+  attendedAt: { type: Date, default: null },
+  checkedInBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
 }, { timestamps: true });
 
 const eventSchema = new mongoose.Schema({
@@ -64,5 +70,6 @@ eventSchema.index(
   { 'registrations.registrationCode': 1 },
   { unique: true, sparse: true }
 );
+eventSchema.index({ 'registrations.student': 1 });
 
 module.exports = mongoose.model('Event', eventSchema);

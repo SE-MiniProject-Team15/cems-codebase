@@ -104,13 +104,13 @@ function StudentRegistrations() {
   }
 
   if (authLoading) {
-    return <main className="events-page"><p className="events-status">Loading account...</p></main>
+    return <main id="main-content" tabIndex={-1} className="events-page"><p className="events-status">Loading account...</p></main>
   }
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== 'Student') return <Navigate to="/login" replace />
 
   return (
-    <main className="events-page">
+    <main id="main-content" tabIndex={-1} className="events-page">
       <header className="events-header">
         <Link className="events-brand" to="/student/dashboard">CEMS</Link>
         <div>

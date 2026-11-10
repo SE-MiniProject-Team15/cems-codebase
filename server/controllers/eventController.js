@@ -285,8 +285,19 @@ async function createEvent(req, res, next) {
 
 async function listMyEvents(req, res, next) {
   try {
-    const events = await Event.find({ organizer: req.user._id })
-      .sort({ updatedAt: -1 });
+    const events = await Event.find({
+      organizer: req.user._id,
+    })
+      .select([
+        ...DETAIL_FIELDS,
+        'organizer',
+        'status',
+        'approvedSnapshot',
+        'createdAt',
+        'updatedAt',
+      ].join(' '))
+      .sort({ updatedAt: -1 })
+      .lean();
 
     return res.json({
       status: 'success',
@@ -833,6 +844,7 @@ function serializeEvent(item) {
     registrationDeadline: item.registrationDeadline,
     capacity: item.capacity,
     registrationCount,
+    isRegistered: Boolean(item.isRegistered),
     remainingSeats: Math.max(
       0,
       (Number(item.capacity) || 0) - registrationCount
@@ -1188,6 +1200,12 @@ async function getEvent(req, res, next) {
           registrationDeadline: 1,
           capacity: 1,
           registeredStudents: 1,
+          isRegistered: {
+            $in: [
+              new mongoose.Types.ObjectId(req.user._id),
+              { $ifNull: ['$registeredStudents', []] },
+            ],
+          },
           bannerUrl: 1,
         },
       },
@@ -1208,6 +1226,176 @@ async function getEvent(req, res, next) {
   }
 }
 
+async function checkInStudent(req, res, next) {
+  try {
+    if (!mongoose.isValidObjectId(req.params.eventId)) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const payload = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+    const ticket = /^CEMS-REGISTRATION:([a-f0-9]{24}):([a-f0-9]{24}):([a-f0-9]{64})$/i.exec(payload);
+    if (!ticket || ticket[1].toLowerCase() !== req.params.eventId.toLowerCase()) {
+      return sendError(res, 400, 'Scan or enter a valid ticket for this event');
+    }
+
+    const eventId = new mongoose.Types.ObjectId(req.params.eventId);
+    const registrationId = new mongoose.Types.ObjectId(ticket[2]);
+    const registrationCode = ticket[3].toLowerCase();
+    const event = await Event.findById(eventId);
+
+    if (!event) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    if (String(event.organizer) !== String(req.user._id)) {
+      return sendError(res, 403, 'Only this event’s organizer can record attendance');
+    }
+
+    if (event.status !== 'Approved') {
+      return sendError(res, 409, 'Attendance is only available for approved events');
+    }
+
+    const now = new Date();
+
+    if (now < new Date(event.startDateTime) || now > new Date(event.endDateTime)) {
+      return sendError(res, 409, 'Check-in is available only during the event');
+    }
+
+    const registration = event.registrations.id(registrationId);
+
+    if (!registration || registration.status !== 'Registered') {
+      return sendError(res, 404, 'This code is not registered for this event');
+    }
+
+    if (registration.attendedAt) {
+      return sendError(res, 409, 'This registration has already been checked in');
+    }
+
+    const result = await Event.updateOne(
+      {
+        _id: eventId,
+        organizer: req.user._id,
+        status: 'Approved',
+        startDateTime: { $lte: now },
+        endDateTime: { $gte: now },
+        registrations: {
+          $elemMatch: {
+            _id: registrationId,
+            status: 'Registered',
+            registrationCode,
+            attendedAt: null,
+          },
+        },
+      },
+      {
+        $set: {
+          'registrations.$.attendedAt': now,
+          'registrations.$.checkedInBy': req.user._id,
+        },
+      }
+    );
+
+    if (!result.modifiedCount) {
+      return sendError(res, 409, 'This registration has already been checked in');
+    }
+
+    return res.json({
+      status: 'success',
+      data: {
+        eventId: String(eventId),
+        studentId: String(registration.student),
+        attendedAt: now,
+        checkedInBy: String(req.user._id),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function listAttendance(req, res, next) {
+  try {
+    if (!mongoose.isValidObjectId(req.params.eventId)) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    const event = await Event.findById(req.params.eventId)
+      .populate('registrations.student', 'name email')
+      .populate('registrations.checkedInBy', 'name');
+
+    if (!event) {
+      return sendError(res, 404, 'Event not found');
+    }
+
+    if (
+      req.user.role !== 'Admin' &&
+      String(event.organizer) !== String(req.user._id)
+    ) {
+      return sendError(res, 403, 'You cannot view attendance for this event');
+    }
+
+    const registrations = event.registrations
+      .filter((registration) => registration.status === 'Registered')
+      .map((registration) => ({
+        studentId: String(registration.student?._id || registration.student),
+        name: registration.student?.name || 'Unknown student',
+        email: registration.student?.email || '',
+        registeredAt: registration.createdAt,
+        attendedAt: registration.attendedAt,
+        checkedInBy: registration.checkedInBy?.name || null,
+      }));
+
+    return res.json({
+      status: 'success',
+      data: {
+        event: {
+          id: String(event._id),
+          title: event.title,
+          status: event.status,
+          startDateTime: event.startDateTime,
+          endDateTime: event.endDateTime,
+          capacity: event.capacity,
+          registeredCount: registrations.length,
+          attendedCount: registrations.filter((item) => item.attendedAt).length,
+        },
+        registrations,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function listAttendanceOverview(req, res, next) {
+  try {
+    const events = await Event.find({
+      registeredStudents: { $exists: true, $ne: [] },
+    })
+      .sort({ startDateTime: -1 })
+      .select('title status startDateTime endDateTime capacity registeredStudents registrations');
+
+    return res.json({
+      status: 'success',
+      data: {
+        events: events.map((event) => ({
+          id: String(event._id),
+          title: event.title,
+          status: event.status,
+          startDateTime: event.startDateTime,
+          endDateTime: event.endDateTime,
+          capacity: event.capacity,
+          registeredCount: event.registeredStudents.length,
+          attendedCount: event.registrations.filter(
+            (item) => item.status === 'Registered' && item.attendedAt
+          ).length,
+        })),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 module.exports = {
   createEvent,
   listMyEvents,
@@ -1220,4 +1408,7 @@ module.exports = {
   listPublicEvents,
   listEvents,
   getEvent,
+  checkInStudent,
+  listAttendance,
+  listAttendanceOverview,
 };

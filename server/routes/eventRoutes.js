@@ -12,6 +12,9 @@ const {
   listPublicEvents,
   listEvents,
   getEvent,
+  checkInStudent,
+  listAttendance,
+  listAttendanceOverview,
 } = require('../controllers/eventController');
 const {
   registerForEvent,
@@ -40,6 +43,9 @@ router.patch('/admin/:id/decision', restrictTo('Admin'), decideEvent);
 
 // Retain the original approval route with the same guarded decision flow.
 router.patch('/:id/approve', restrictTo('Admin'), approveEvent);
+router.get('/attendance/overview', restrictTo('Admin'), listAttendanceOverview);
+router.get('/:eventId/attendance', restrictTo('Organizer', 'Admin'), listAttendance);
+router.post('/:eventId/attendance/check-in', restrictTo('Organizer'), checkInStudent);
 
 router.get('/', restrictTo('Student'), listEvents);
 router.post('/:eventId/register', restrictTo('Student'), registerForEvent);

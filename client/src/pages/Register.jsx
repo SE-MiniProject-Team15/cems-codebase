@@ -28,6 +28,7 @@ function Register() {
     }
 
     if (!passwordPolicy.test(password)) {
+      document.getElementById('register-password')?.focus()
       setFormError(
         'Password must be at least 8 characters and contain at least one letter and one digit.'
       )
@@ -51,7 +52,7 @@ function Register() {
   }
 
   return (
-    <main className="auth-page">
+    <main id="main-content" tabIndex={-1} className="auth-page">
       <section className="auth-card">
         <p className="auth-eyebrow">
           College Event Management System
@@ -63,7 +64,7 @@ function Register() {
           Join your campus community and discover upcoming events.
         </p>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form aria-busy={submitting} className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="register-name">Name</label>
           <input
             id="register-name"
@@ -89,10 +90,12 @@ function Register() {
             type="password"
             autoComplete="new-password"
             minLength={8}
+            aria-describedby="password-hint"
+            aria-invalid={formError.includes('Password') || undefined}
             required
           />
 
-          <p className="auth-hint">
+          <p className="auth-hint" id="password-hint">
             At least 8 characters, including a letter and a number.
           </p>
 

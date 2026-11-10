@@ -1,26 +1,56 @@
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { getPublicEvents } from '../services/api'
+import useAuth from '../context/useAuth'
 
 function StudentEvents() {
+  const { user, loading: authLoading } = useAuth()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    getPublicEvents()
-      .then((response) => {
-        setEvents(response.data?.events || [])
-      })
-      .catch((err) => {
-        setError(
-          err.response?.data?.message ||
-          'Could not load events. Please try again.'
-        )
-      })
-      .finally(() => setLoading(false))
-  }, [])
+    if (authLoading || user?.role !== 'Student') return
+
+    let active = true
+
+    async function loadEvents() {
+      try {
+        const response = await getPublicEvents()
+        if (active) setEvents(response.data?.events || [])
+      } catch (err) {
+        if (active) {
+          setError(
+            err.response?.data?.message ||
+              'Could not load events. Please try again.'
+          )
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    loadEvents()
+
+    return () => {
+      active = false
+    }
+  }, [authLoading, user])
+
+  if (authLoading) {
+    return <main className="auth-page"><p>Loading your account...</p></main>
+  }
+
+  if (!user) return <Navigate to="/login" replace />
+
+  if (user.role !== 'Student') {
+    const dashboard = {
+      Organizer: '/organizer/dashboard',
+      Admin: '/admin/dashboard',
+    }[user.role]
+    return <Navigate to={dashboard || '/login'} replace />
+  }
 
   return (
     <main id="main-content" tabIndex={-1} className="auth-page event-page">

@@ -46,7 +46,7 @@ async function sendNotificationEmail(to, subject, message) {
     });
   } catch (error) {
     // Email failure must not undo the underlying application action.
-    console.error('Notification email delivery failed:', error.message);
+    console.error('Notification email delivery failed:', error.name || 'Error');
   }
 }
 

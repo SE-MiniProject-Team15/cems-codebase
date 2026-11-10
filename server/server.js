@@ -12,6 +12,7 @@ const notificationRouter = require('./routes/notificationRoutes');
 const healthRouter = require('./routes/healthRoutes');
 const registrationRouter = require('./routes/registrationRoutes');
 const { startReminderJob } = require('./services/reminderJob');
+const errorHandler = require('./middleware/errorHandler');
 
 dotenv.config();
 
@@ -67,25 +68,7 @@ app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/health', healthRouter);
 
-// Centralized error handler
-app.use((err, req, res, next) => {
-  const statusCode =
-    err.statusCode >= 400 && err.statusCode < 500
-      ? err.statusCode
-      : 500;
-
-  if (statusCode === 500) {
-    console.error('Request failed:', err);
-  }
-
-  return res.status(statusCode).json({
-    status: 'error',
-    message:
-      statusCode === 500
-        ? 'Internal server error'
-        : err.message,
-  });
-});
+app.use(errorHandler);
 
 function validateEnvironment() {
   const required = ['MONGO_URI', 'JWT_SECRET'];

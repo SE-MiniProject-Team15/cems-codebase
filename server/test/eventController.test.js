@@ -172,3 +172,26 @@ test('approval rolls back when its in-app notification could not be persisted', 
   assert.match(res.payload.message, /could not be saved/i)
   assert.equal(event.status, 'Pending Approval')
 })
+
+// The organizer view needs publication state without exposing attendance records.
+test('organizer event listing retains the approved snapshot and excludes registration data', async (t) => {
+  const originalFind = Event.find
+  t.after(() => { Event.find = originalFind })
+  let fields
+  const events = [{ _id: eventId, status: 'Pending Approval', approvedSnapshot: eventDetails }]
+  Event.find = (filter) => {
+    assert.deepEqual(filter, { organizer: 'organizer-id' })
+    return { select(projection) {
+      fields = projection.split(' ')
+      return { sort: () => ({ lean: async () => events }) }
+    } }
+  }
+  const res = response()
+  await require('../controllers/eventController').listMyEvents(
+    { user: { _id: 'organizer-id' } }, res, (error) => { throw error },
+  )
+  assert.ok(fields.includes('approvedSnapshot'))
+  assert.ok(!fields.includes('registrations'))
+  assert.ok(!fields.includes('registeredStudents'))
+  assert.deepEqual(res.payload.data.events, events)
+})

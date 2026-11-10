@@ -53,14 +53,14 @@ function StudentEvents() {
   }
 
   return (
-    <main className="auth-page event-page">
+    <main id="main-content" tabIndex={-1} className="auth-page event-page">
       <section className="auth-card event-card">
         <p className="auth-eyebrow">College Event Management System</p>
         <h1>Explore Events</h1>
         <p>Discover upcoming college events.</p>
         <Link to="/student/dashboard">Back to dashboard</Link>
 
-        {loading && <p>Loading events...</p>}
+        {loading && <p role="status">Loading events...</p>}
         {error && <p role="alert">{error}</p>}
 
         {!loading && !error && events.length === 0 && (

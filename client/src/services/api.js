@@ -75,6 +75,18 @@ export function getMyRegistrations() {
   return api.get('/registrations/me').then(getPayload);
 }
 
+export function checkInRegistration(eventId, code) {
+  return api.post(`/events/${encodeURIComponent(eventId)}/attendance/check-in`, { code }).then(getPayload);
+}
+
+export function getEventAttendance(eventId) {
+  return api.get(`/events/${encodeURIComponent(eventId)}/attendance`).then(getPayload);
+}
+
+export function getAttendanceOverview() {
+  return api.get('/events/attendance/overview').then(getPayload);
+}
+
 export function getNotifications() {
   return api.get('/notifications').then(getPayload)
 }

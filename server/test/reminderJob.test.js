@@ -1,72 +1,133 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const nodemailer = require('nodemailer');
+const cron = require('node-cron');
 const Event = require('../models/Event');
 const Notification = require('../models/Notification');
-const { runReminders } = require('../services/reminderJob');
+const mailer = require('../services/notificationService');
 
-test('published snapshots get one reminder for their scheduled event time', async (t) => {
-  const original = {
+const jobPath = require.resolve('../services/reminderJob');
+
+function setup(t, sendEmail = mailer.sendNotificationEmail) {
+  const originals = {
+    schedule: cron.schedule,
     find: Event.find,
     exists: Notification.exists,
     create: Notification.create,
-    createTransport: nodemailer.createTransport,
-    env: {
-      SMTP_HOST: process.env.SMTP_HOST,
-      SMTP_USER: process.env.SMTP_USER,
-      SMTP_PASS: process.env.SMTP_PASS,
-    },
+    sendEmail: mailer.sendNotificationEmail,
+    log: console.log,
+    error: console.error,
   };
   t.after(() => {
-    Event.find = original.find;
-    Notification.exists = original.exists;
-    Notification.create = original.create;
-    nodemailer.createTransport = original.createTransport;
-    for (const [key, value] of Object.entries(original.env)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    cron.schedule = originals.schedule;
+    Event.find = originals.find;
+    Notification.exists = originals.exists;
+    Notification.create = originals.create;
+    mailer.sendNotificationEmail = originals.sendEmail;
+    console.log = originals.log;
+    console.error = originals.error;
+    delete require.cache[jobPath];
   });
+  mailer.sendNotificationEmail = sendEmail;
+  delete require.cache[jobPath];
+  return require('../services/reminderJob');
+}
 
-  process.env.SMTP_HOST = 'smtp.example.test';
-  process.env.SMTP_USER = 'mailer@example.test';
-  process.env.SMTP_PASS = 'test-password';
-
-  const now = new Date('2026-11-01T00:00:00.000Z');
-  const scheduledFor = new Date('2026-11-02T00:00:30.000Z');
-  const sent = [];
-  const notices = [];
-  let filter;
-
-  Event.find = (query) => {
-    filter = query;
-    return {
-      populate: async () => [{
-        _id: '507f1f77bcf86cd799439012',
-        status: 'Changes Requested',
-        title: 'Unapproved title',
-        approvedSnapshot: { title: 'Published title', startDateTime: scheduledFor },
-        registeredStudents: [{ _id: '507f1f77bcf86cd799439011', email: 'student@example.test' }],
-      }],
-    };
+function startTask(t, sendEmail) {
+  const job = setup(t, sendEmail);
+  let task;
+  cron.schedule = (expression, callback) => {
+    assert.equal(expression, '* * * * *');
+    task = callback;
   };
-  Notification.exists = async (query) => notices.some((item) =>
-    String(item.event) === String(query.event) &&
-    String(item.recipient) === String(query.recipient) &&
-    +item.scheduledFor === +query.scheduledFor
-  );
-  Notification.create = async (notice) => { notices.push(notice); return notice; };
-  nodemailer.createTransport = () => ({
-    async sendMail(mail) { sent.push(mail); },
+  console.log = () => {};
+  job.startReminderJob();
+  return task;
+}
+
+test('reminder scheduler registers the one-minute job', (t) => {
+  const job = setup(t);
+  let expression;
+  let task;
+  cron.schedule = (schedule, callback) => {
+    expression = schedule;
+    task = callback;
+    return { stop() {} };
+  };
+  console.log = () => {};
+
+  job.startReminderJob();
+  assert.equal(expression, '* * * * *');
+  assert.equal(typeof task, 'function');
+});
+
+test('reminder job saves one in-app notice and sends a matching email', async (t) => {
+  const sent = [];
+  const task = startTask(t, async (...message) => { sent.push(message); });
+  const student = { _id: 'student-1', email: 'student@example.test' };
+  const event = {
+    _id: 'event-1', status: 'Approved', title: 'Workshop',
+    startDateTime: new Date('2026-11-13T10:00:00.000Z'), registeredStudents: [student],
+  };
+  let findFilter;
+  let existingFilter;
+  const saved = [];
+  Event.find = (filter) => {
+    findFilter = filter;
+    return { populate: async (path, fields) => {
+      assert.equal(path, 'registeredStudents');
+      assert.equal(fields, 'email name');
+      return [event];
+    } };
+  };
+  Notification.exists = async (filter) => { existingFilter = filter; return null; };
+  Notification.create = async (notice) => { saved.push(notice); };
+
+  const before = Date.now();
+  await task();
+
+  const approvedWindow = findFilter.$or.find((filter) => filter.status === 'Approved').startDateTime;
+  assert.ok(Math.abs(approvedWindow.$gte.getTime() - before - 24 * 60 * 60 * 1000) < 1000);
+  assert.equal(approvedWindow.$lt.getTime() - approvedWindow.$gte.getTime(), 60 * 1000);
+  assert.deepEqual(existingFilter, {
+    event: event._id, recipient: student._id, type: 'EVENT_REMINDER', scheduledFor: event.startDateTime,
   });
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].type, 'EVENT_REMINDER');
+  assert.match(saved[0].message, /Workshop/);
+  assert.deepEqual(sent[0], [student.email, 'Reminder: Workshop', saved[0].message]);
+});
 
-  await runReminders(now);
-  await runReminders(now);
+test('reminder job skips existing reminders and contains per-student failures', async (t) => {
+  const task = startTask(t, async () => { throw new Error('email failed'); });
+  const errors = [];
+  console.error = (...args) => errors.push(args);
+  Event.find = () => ({ populate: async () => [
+    { _id: 'event-1', status: 'Approved', title: 'Workshop', startDateTime: new Date(), registeredStudents: [{ _id: 's1', email: 'a@example.test' }] },
+    { _id: 'event-2', status: 'Approved', title: 'Talk', startDateTime: new Date(), registeredStudents: [{ _id: 's2', email: 'b@example.test' }] },
+    { _id: 'event-3', status: 'Approved', title: 'Seminar', startDateTime: new Date(), registeredStudents: [{ _id: 's3', email: 'c@example.test' }] },
+  ] });
+  let existsCalls = 0;
+  Notification.exists = async () => { existsCalls += 1; return existsCalls === 1; };
+  let createCalls = 0;
+  Notification.create = async () => {
+    createCalls += 1;
+    if (createCalls === 1) throw new Error('write failed');
+  };
 
-  assert.ok(filter.$or.some((part) => part['approvedSnapshot.startDateTime']));
-  assert.equal(notices.length, 1);
-  assert.equal(notices[0].scheduledFor, scheduledFor);
-  assert.match(notices[0].message, /Published title/);
-  assert.equal(sent.length, 1);
-  assert.match(sent[0].subject, /Published title/);
+  await task();
+  assert.equal(existsCalls, 3);
+  assert.equal(errors.length, 2);
+  assert.match(errors[0][0], /Could not create event reminder/);
+  assert.match(errors[1][0], /Could not create event reminder/);
+});
+
+test('reminder job contains lookup failures', async (t) => {
+  const task = startTask(t);
+  const errors = [];
+  console.error = (...args) => errors.push(args);
+  Event.find = () => { throw new Error('database unavailable'); };
+
+  await task();
+  assert.equal(errors.length, 1);
+  assert.match(errors[0][0], /Reminder job failed/);
 });

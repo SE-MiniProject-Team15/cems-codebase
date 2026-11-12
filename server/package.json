@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test",
     "backup": "node scripts/backup.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:integration": "node integration/system.cjs"
   },
   "keywords": [],
   "author": "",
@@ -22,5 +23,9 @@
     "mongoose": "^9.11.2",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.2.1"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^11.3.0",
+    "smtp-server": "^3.21.4"
   }
 }

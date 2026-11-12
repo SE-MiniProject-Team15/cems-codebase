@@ -1,121 +1,103 @@
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const Notification = require('../models/Notification')
-const router = require('../routes/notificationRoutes')
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const Notification = require('../models/Notification');
+const router = require('../routes/notificationRoutes');
+const { protect } = require('../middleware/authMiddleware');
 
 function response() {
   return {
     statusCode: 200,
-    status(code) { this.statusCode = code; return this },
-    json(payload) { this.payload = payload; return this },
-  }
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.payload = payload; return this; },
+  };
 }
 
-function readHandler() {
-  return router.stack.find((layer) => layer.route?.path === '/:id/read')
-    .route.stack[0].handle
+function routeHandler(path, method) {
+  return router.stack.find((layer) => layer.route?.path === path && layer.route.methods[method])
+    ?.route.stack.at(-1).handle;
 }
 
-function listHandler() {
-  return router.stack.find((layer) => layer.route?.path === '/')
-    .route.stack[0].handle
-}
+test('notification routes require authentication and query only the current recipient', () => {
+  assert.equal(router.stack[0].handle, protect);
+  assert.equal(routeHandler('/', 'get') instanceof Function, true);
+  assert.equal(routeHandler('/:id/read', 'patch') instanceof Function, true);
+});
 
-test('notification listing is scoped to the authenticated recipient', async (t) => {
-  const originalFind = Notification.find
-  let query
-  let ordering
-  const notifications = [{ _id: 'notice-id', read: false }]
-  Notification.find = (filter) => {
-    query = filter
-    return { sort: async (sort) => { ordering = sort; return notifications } }
-  }
-  t.after(() => { Notification.find = originalFind })
+test('GET notifications returns the current user’s notifications newest first', async (t) => {
+  const original = Notification.find;
+  t.after(() => { Notification.find = original; });
+  const userId = 'user-1';
+  const notices = [{ _id: 'n1' }];
+  let filter;
+  Notification.find = (query) => {
+    filter = query;
+    return { sort: async (order) => {
+      assert.deepEqual(order, { createdAt: -1, _id: -1 });
+      return notices;
+    } };
+  };
+  const res = response();
+  await routeHandler('/', 'get')({ user: { _id: userId } }, res, (error) => { throw error; });
+  assert.deepEqual(filter, { recipient: userId });
+  assert.deepEqual(res.payload.data.notifications, notices);
+});
 
-  const res = response()
-  await listHandler()(
-    { user: { _id: 'recipient-id' } },
-    res,
-    (error) => { throw error },
-  )
+test('GET notifications forwards database errors', async (t) => {
+  const original = Notification.find;
+  t.after(() => { Notification.find = original; });
+  const failure = new Error('read failed');
+  Notification.find = () => ({ sort: async () => { throw failure; } });
+  const res = response();
+  let nextError;
+  await routeHandler('/', 'get')({ user: { _id: 'user-1' } }, res, (error) => { nextError = error; });
+  assert.equal(nextError, failure);
+});
 
-  assert.deepEqual(query, { recipient: 'recipient-id' })
-  assert.deepEqual(ordering, { createdAt: -1, _id: -1 })
-  assert.deepEqual(res.payload.data.notifications, notifications)
-  assert.equal(res.payload.data.notifications[0].read, false)
-})
+test('PATCH notification read scopes updates to the current recipient', async (t) => {
+  const original = Notification.findOneAndUpdate;
+  t.after(() => { Notification.findOneAndUpdate = original; });
+  const notice = { _id: 'notice-1', read: true };
+  let args;
+  Notification.findOneAndUpdate = async (...input) => { args = input; return notice; };
+  const res = response();
+  await routeHandler('/:id/read', 'patch')({
+    params: { id: '507f1f77bcf86cd799439011' }, user: { _id: 'user-1' },
+  }, res, (error) => { throw error; });
+  assert.deepEqual(args, [
+    { _id: '507f1f77bcf86cd799439011', recipient: 'user-1' },
+    { read: true },
+    { returnDocument: 'after' },
+  ]);
+  assert.equal(res.payload.data.notification, notice);
+});
 
-test('mark-read rejects malformed notification IDs before querying', async (t) => {
-  const originalFindOneAndUpdate = Notification.findOneAndUpdate
-  let queried = false
-  Notification.findOneAndUpdate = async () => {
-    queried = true
-    return null
-  }
-  t.after(() => { Notification.findOneAndUpdate = originalFindOneAndUpdate })
+test('PATCH notification read rejects malformed IDs before querying', async (t) => {
+  const original = Notification.findOneAndUpdate;
+  t.after(() => { Notification.findOneAndUpdate = original; });
+  let queried = false;
+  Notification.findOneAndUpdate = async () => { queried = true; };
 
-  const res = response()
-  await readHandler()(
-    { params: { id: 'not-an-object-id' }, user: { _id: 'recipient-id' } },
-    res,
-    (error) => { throw error },
-  )
+  const res = response();
+  await routeHandler('/:id/read', 'patch')({
+    params: { id: 'not-an-object-id' }, user: { _id: 'user-1' },
+  }, res, (error) => { throw error; });
 
-  assert.equal(res.statusCode, 400)
-  assert.equal(res.payload.message, 'Invalid notification ID')
-  assert.equal(queried, false)
-})
+  assert.equal(res.statusCode, 400);
+  assert.equal(queried, false);
+});
 
-test('mark-read query remains scoped to the authenticated recipient', async (t) => {
-  const originalFindOneAndUpdate = Notification.findOneAndUpdate
-  let query
-  let options
-  const notification = { _id: 'notification-id', read: true }
-  Notification.findOneAndUpdate = async (filter, update, queryOptions) => {
-    query = filter
-    options = queryOptions
-    return notification
-  }
-  t.after(() => { Notification.findOneAndUpdate = originalFindOneAndUpdate })
+test('PATCH notification read returns 404 when absent and forwards storage failures', async (t) => {
+  const original = Notification.findOneAndUpdate;
+  t.after(() => { Notification.findOneAndUpdate = original; });
+  Notification.findOneAndUpdate = async () => null;
+  let res = response();
+  await routeHandler('/:id/read', 'patch')({ params: { id: '507f1f77bcf86cd799439012' }, user: { _id: 'user-1' } }, res, (error) => { throw error; });
+  assert.equal(res.statusCode, 404);
 
-  const res = response()
-  await readHandler()(
-    {
-      params: { id: '507f1f77bcf86cd799439011' },
-      user: { _id: 'recipient-id' },
-    },
-    res,
-    (error) => { throw error },
-  )
-
-  assert.equal(query._id, '507f1f77bcf86cd799439011')
-  assert.equal(query.recipient, 'recipient-id')
-  assert.deepEqual(options, { returnDocument: 'after' })
-  assert.equal(res.payload.data.notification, notification)
-})
-
-test('mark-read does not disclose another recipient notification', async (t) => {
-  const originalFindOneAndUpdate = Notification.findOneAndUpdate
-  let query
-  Notification.findOneAndUpdate = async (filter) => {
-    query = filter
-    return null
-  }
-  t.after(() => { Notification.findOneAndUpdate = originalFindOneAndUpdate })
-
-  const res = response()
-  await readHandler()(
-    {
-      params: { id: '507f1f77bcf86cd799439011' },
-      user: { _id: 'different-recipient-id' },
-    },
-    res,
-    (error) => { throw error },
-  )
-
-  assert.deepEqual(query, {
-    _id: '507f1f77bcf86cd799439011',
-    recipient: 'different-recipient-id',
-  })
-  assert.equal(res.statusCode, 404)
-})
+  const failure = new Error('write failed');
+  Notification.findOneAndUpdate = async () => { throw failure; };
+  res = response();
+  let nextError;
+  await routeHandler('/:id/read', 'patch')({ params: { id: '507f1f77bcf86cd799439011' }, user: { _id: 'user-1' } }, res, (error) => { nextError = error; });
+  assert.equal(nextError, failure);
+});

@@ -113,3 +113,4 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.validateEnvironment = validateEnvironment;
+module.exports.handleError = errorHandler;

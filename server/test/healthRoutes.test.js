@@ -19,6 +19,8 @@ test('GET /api/health reports process and MongoDB health without authentication'
   const payload = await response.json();
 
   assert.equal(response.status, 200);
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(response.headers.get('x-frame-options'), 'DENY');
   assert.ok(['healthy', 'degraded'].includes(payload.status));
   assert.equal(typeof payload.uptime, 'number');
   assert.ok(payload.uptime >= 0);

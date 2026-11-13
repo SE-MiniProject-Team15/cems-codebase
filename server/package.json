@@ -4,7 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "test": "node --test test",
+    "test": "node --test",
     "backup": "node scripts/backup.js",
     "start": "node server.js",
     "test:integration": "node integration/system.cjs"

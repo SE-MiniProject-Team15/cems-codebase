@@ -67,8 +67,7 @@ app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/health', healthRouter);
 
-// Centralized error handler
-app.use((err, req, res, next) => {
+function handleError(err, req, res, next) {
   const statusCode =
     err.statusCode >= 400 && err.statusCode < 500
       ? err.statusCode
@@ -85,7 +84,9 @@ app.use((err, req, res, next) => {
         ? 'Internal server error'
         : err.message,
   });
-});
+}
+
+app.use(handleError);
 
 function validateEnvironment() {
   const required = ['MONGO_URI', 'JWT_SECRET'];
@@ -130,3 +131,4 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.validateEnvironment = validateEnvironment;
+module.exports.handleError = handleError;

@@ -83,8 +83,15 @@ for (const width of [320, 768, 1440]) {
 test('skip link and route changes move keyboard focus into the main landmark', async ({ page }) => {
   await mockApi(page, 'Student', { guest: true })
   await page.goto('/login')
-  await page.keyboard.press('Tab')
-  await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
+  const skipLink = page.getByRole('link', { name: 'Skip to main content' })
+  if (test.info().project.name === 'webkit') {
+    // WebKit's Playwright port follows the host's link-tabbing preference.
+    // Focus directly here; Chromium and Firefox cover sequential Tab navigation.
+    await skipLink.focus()
+  } else {
+    await page.keyboard.press('Tab')
+  }
+  await expect(skipLink).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page.getByRole('main')).toBeFocused()
   await page.getByRole('link', { name: 'Create an account' }).click()

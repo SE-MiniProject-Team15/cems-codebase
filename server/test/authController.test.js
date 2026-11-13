@@ -153,6 +153,9 @@ test('successful login issues a verified JWT cookie with secure session flags', 
     email: 'student@example.edu',
     role: 'Student',
     password: 'stored-hash',
+    loginAttempts: 0,
+    comparePassword(candidate) { return bcrypt.compare(candidate, this.password); },
+    async save() {},
   };
   const secret = 'local-test-jwt-secret';
   setEnvironment(t, 'JWT_SECRET', secret);
@@ -187,6 +190,9 @@ test('login uses the same generic response for unknown users and wrong passwords
   const user = {
     _id: 'student-id',
     password: 'stored-hash',
+    loginAttempts: 0,
+    comparePassword(candidate) { return bcrypt.compare(candidate, this.password); },
+    async save() {},
   };
   User.findOne = (filter) => ({
     select: async () => (

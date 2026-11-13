@@ -4,6 +4,10 @@ System integration testing was executed on 12 November 2026 against application 
 
 See [machine-readable final results](system-integration-results.json) for the execution timestamp, runtime, scenario outcomes and exit status. The [initial run](system-integration-initial-results.json) is retained: its attendance failure was a test harness error (raw registration code supplied instead of the full QR ticket). The runner was corrected without changing application code.
 
+## Merge validation
+
+Reran all seven integration scenarios successfully on 14 November 2026 after merging `origin/main` (`547dd00`); the latest JSON records the tested merge commit and timestamp. Retained the original execution history above. Dependency conflicts retain c8, mongodb-memory-server, smtp-server and the updated Mongoose version. Committed conflict markers inherited from main were removed, both unit-test variants were retained in separate files, and older login fixtures were aligned with the existing model interface.
+
 ## Scope
 
 This is separate from the team's unit tests. It starts the real Express application over HTTP, a temporary real MongoDB replica set with indexes and transaction support, and a local SMTP receiver. No database, API or mail transport is mocked. Chromium runs the real React application against this backend for login and event discovery.

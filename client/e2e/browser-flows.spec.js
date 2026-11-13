@@ -46,7 +46,8 @@ async function fixture(page, role = 'Student', guest = false) {
         data = { promotionNotificationSaved: true }
         message = 'Registration cancelled.'
       }
-    } else if (path === '/api/registrations/me') data = { registrations }
+    } else if (path === '/api/notifications' && method === 'GET') data = { notifications: [] }
+    else if (path === '/api/registrations/me') data = { registrations }
     else throw new Error(`Unexpected API request: ${method} ${path}`)
     await route.fulfill({ status, contentType: 'application/json', headers: {
       'Access-Control-Allow-Origin': 'http://127.0.0.1:4173',

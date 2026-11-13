@@ -48,7 +48,7 @@ const eventSchema = new mongoose.Schema({
   bannerUrl: { type: String, trim: true, required: function () { return this.status !== 'Draft'; } },
   registrationDeadline: { type: Date, required: function () { return this.status !== 'Draft'; } },
   organizer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-  status: { type: String, enum: ['Draft', 'Pending Approval', 'Approved', 'Cancelled'], default: 'Draft', index: true },
+  status: { type: String, enum: ['Draft', 'Pending Approval', 'Approved', 'Rejected', 'Changes Requested', 'Cancelled'], default: 'Draft', index: true },
   approvedSnapshot: { type: eventDetailsSchema, default: undefined },
   registeredStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   registrations: {

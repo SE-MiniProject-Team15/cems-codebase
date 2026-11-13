@@ -160,7 +160,7 @@ test('approved event registration creates a unique code and QR payload', async (
   assert.equal(createdNotifications[0].type, 'REGISTRATION_CONFIRMATION');
 });
 
-test('a full event adds the student to the waitlist without creating a ticket', async (t) => {
+test('a full event adds the student to the waitlist and sends a notice without creating a ticket', async (t) => {
   const event = makeEvent({ registeredStudents: [otherStudentId] });
   const { createdNotifications } = installMocks(t, event);
 
@@ -170,7 +170,8 @@ test('a full event adds the student to the waitlist without creating a ticket', 
   assert.equal(res.payload.data.registration.status, 'Waitlisted');
   assert.equal(res.payload.data.registration.registrationCode, undefined);
   assert.equal(event.registeredStudents.length, 1);
-  assert.equal(createdNotifications.length, 0);
+  assert.equal(createdNotifications.length, 1);
+  assert.equal(createdNotifications[0].type, 'WAITLIST_JOINED');
 });
 
 test('duplicate active registration and expired registration deadline are rejected', async (t) => {
@@ -405,4 +406,79 @@ test('event registration codes are hidden by default and event saves use optimis
     Event.schema.path('registrations.registrationCode').options.select,
     false
   );
+});
+
+test('registration rejects invalid, unavailable, and already-started events', async (t) => {
+  const res = makeResponse();
+  await registerForEvent({
+    params: { eventId: 'invalid' }, user: { _id: studentId },
+  }, res, (error) => { throw error; });
+  assert.equal(res.statusCode, 400);
+
+  const originals = { findOne: Event.findOne };
+  t.after(() => { Event.findOne = originals.findOne; });
+  Event.findOne = () => ({ select: async () => null });
+  let unavailable = await registrationRequest(registerForEvent);
+  assert.equal(unavailable.statusCode, 404);
+
+  const cancelled = makeEvent({ status: 'Cancelled' });
+  Event.findOne = () => ({ select: async () => cancelled });
+  unavailable = await registrationRequest(registerForEvent);
+  assert.equal(unavailable.statusCode, 404);
+
+  const started = makeEvent({ startDateTime: new Date(Date.now() - 1) });
+  Event.findOne = () => ({ select: async () => started });
+  const closed = await registrationRequest(registerForEvent);
+  assert.equal(closed.statusCode, 400);
+  assert.match(closed.payload.message, /started/i);
+});
+
+test('registration retries a version conflict with a freshly loaded event', async (t) => {
+  const originals = {
+    findOne: Event.findOne,
+    notificationCreate: Notification.create,
+  };
+  t.after(() => {
+    Event.findOne = originals.findOne;
+    Notification.create = originals.notificationCreate;
+  });
+  const stale = makeEvent({
+    async save() { throw Object.assign(new Error('stale'), { name: 'VersionError' }); },
+  });
+  const fresh = makeEvent();
+  let lookups = 0;
+  Event.findOne = () => ({ select: async () => (lookups++ === 0 ? stale : fresh) });
+  Notification.create = async () => ({});
+
+  const res = await registrationRequest(registerForEvent);
+  assert.equal(res.statusCode, 201);
+  assert.equal(lookups, 2);
+  assert.equal(fresh.registrations.length, 1);
+});
+
+test('cancellation rejects invalid, missing, started, and inactive registrations', async (t) => {
+  const res = makeResponse();
+  await cancelRegistration({
+    params: { eventId: 'invalid' }, user: { _id: studentId },
+  }, res, (error) => { throw error; });
+  assert.equal(res.statusCode, 400);
+
+  const originals = { findOne: Event.findOne };
+  t.after(() => { Event.findOne = originals.findOne; });
+  Event.findOne = () => ({ select: async () => null });
+  let result = await registrationRequest(cancelRegistration);
+  assert.equal(result.statusCode, 404);
+
+  const started = makeEvent({
+    registrations: [makeRegistration(studentId, 'Registered')],
+    startDateTime: new Date(Date.now() - 1),
+  });
+  Event.findOne = () => ({ select: async () => started });
+  result = await registrationRequest(cancelRegistration);
+  assert.equal(result.statusCode, 400);
+
+  const inactive = makeEvent();
+  Event.findOne = () => ({ select: async () => inactive });
+  result = await registrationRequest(cancelRegistration);
+  assert.equal(result.statusCode, 404);
 });

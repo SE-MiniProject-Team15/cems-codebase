@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
         'EVENT_UPDATED',
         'EVENT_REMINDER',
         'REGISTRATION_CONFIRMATION',
+        'WAITLIST_JOINED',
         'APPROVAL_DECISION',
         'WAITLIST_PROMOTED',
       ],
@@ -34,6 +35,7 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    scheduledFor: Date,
     read: {
       type: Boolean,
       default: false,
@@ -43,5 +45,9 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index(
+  { recipient: 1, event: 1, type: 1, scheduledFor: 1 },
+  { unique: true, partialFilterExpression: { type: 'EVENT_REMINDER', scheduledFor: { $exists: true } } }
+);
 
 module.exports = mongoose.model('Notification', notificationSchema);

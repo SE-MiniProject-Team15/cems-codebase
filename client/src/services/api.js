@@ -1,60 +1,66 @@
-import axios from 'axios';
-
+import axios from 'axios'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true,
-});
-
+})
 function getPayload(response) {
-  return response.data;
+  return response.data
 }
-
 export function registerUser(data) {
-  return api.post('/auth/register', data).then(getPayload);
+  return api.post('/auth/register', data).then(getPayload)
 }
-
 export function loginUser(data) {
-  return api.post('/auth/login', data).then(getPayload);
+  return api.post('/auth/login', data).then(getPayload)
 }
-
 export function logoutUser() {
-  return api.post('/auth/logout').then(getPayload);
+  return api.post('/auth/logout').then(getPayload)
 }
-
 export function getCurrentUser() {
-  return api.get('/auth/me').then(getPayload);
+  return api.get('/auth/me').then(getPayload)
 }
 
 export function createEvent(data) {
-  return api.post('/events', data).then(getPayload);
+  return api.post('/events', data).then(getPayload)
 }
 
 export function getMyEvents() {
-  return api.get('/events/mine').then(getPayload);
+  return api.get('/events/mine').then(getPayload)
 }
 
 export function updateEvent(id, data) {
-  return api.patch(`/events/${id}`, data).then(getPayload);
+  return api.patch(`/events/${id}`, data).then(getPayload)
 }
 
 export function cancelEvent(id) {
-  return api.patch(`/events/${id}/cancel`).then(getPayload);
+  return api.patch(`/events/${id}/cancel`).then(getPayload)
 }
 
 export function getPublicEvents() {
-  return api.get('/events/public').then(getPayload);
+  return api.get('/events/public').then(getPayload)
 }
 
 export function approveEvent(id) {
-  return api.patch(`/events/${id}/approve`).then(getPayload);
+  return api.patch(`/events/${id}/approve`).then(getPayload)
+}
+
+export function getPendingEvents() {
+  return api.get('/events/admin/pending').then(getPayload)
+}
+
+export function getPendingEventDetails(id) {
+  return api.get(`/events/admin/pending/${id}`).then(getPayload)
+}
+
+export function decideEvent(id, decision) {
+  return api.patch(`/events/admin/${id}/decision`, decision).then(getPayload)
 }
 
 export function getEvents(params) {
-  return api.get('/events', { params }).then(getPayload);
+  return api.get('/events', { params }).then(getPayload)
 }
 
 export function getEvent(eventId) {
-  return api.get(`/events/${encodeURIComponent(eventId)}`).then(getPayload);
+  return api.get(`/events/${encodeURIComponent(eventId)}`).then(getPayload)
 }
 
 export function registerForEvent(eventId) {
@@ -82,11 +88,11 @@ export function getAttendanceOverview() {
 }
 
 export function getNotifications() {
-  return api.get('/notifications').then(getPayload);
+  return api.get('/notifications').then(getPayload)
 }
 
 export function markNotificationAsRead(id) {
-  return api.patch(`/notifications/${id}/read`).then(getPayload);
+  return api.patch(`/notifications/${id}/read`).then(getPayload)
 }
 
-export default api;
+export default api

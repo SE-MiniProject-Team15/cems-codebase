@@ -1,3 +1,4 @@
+import AdminEventReview from './pages/AdminEventReview';
 import { Link, Navigate, Route, Routes } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -12,18 +13,18 @@ import './App.css';
 import RouteAccessibility from './components/RouteAccessibility';
 
 function Dashboard({ role }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout } = useAuth()
 
   if (loading) return <main id="main-content" tabIndex={-1} className="auth-page"><p>Loading your account...</p></main>;
   if (!user) return <Navigate to="/login" replace />;
 
   if (user.role !== role) {
-    const dashboards = {
+    const dashboard = {
       Student: '/student/dashboard',
       Organizer: '/organizer/dashboard',
       Admin: '/admin/dashboard',
-    };
-    return <Navigate to={dashboards[user.role] || '/login'} replace />;
+    }[user.role]
+    return <Navigate to={dashboard || '/login'} replace />
   }
 
   return (
@@ -35,12 +36,13 @@ function Dashboard({ role }) {
         {role === 'Student' && <Link className="auth-button" to="/events">Explore Events</Link>}
         {role === 'Student' && <Link className="auth-button" to="/registrations">My Registrations &amp; Tickets</Link>}
         {role === 'Organizer' && <Link className="auth-button" to="/organizer/events">Manage Events</Link>}
+        {role === 'Admin' && <Link className="auth-button" to="/admin/events/review">Review events</Link>}
         {role === 'Admin' && <Link className="auth-button" to="/admin/attendance">View attendance</Link>}
         <Link className="auth-button" to="/notifications">View Notifications</Link>
         <button className="auth-button" type="button" onClick={logout}>Log out</button>
       </section>
     </main>
-  );
+  )
 }
 
 function App() {
@@ -56,6 +58,7 @@ function App() {
       <Route path="/admin/dashboard" element={<Dashboard role="Admin" />} />
       <Route path="/student/events" element={<StudentEvents />} />
       <Route path="/organizer/events" element={<OrganizerEvents />} />
+      <Route path="/admin/events/review" element={<AdminEventReview />} />
       <Route path="/organizer/events/:eventId/attendance" element={<OrganizerAttendance />} />
       <Route path="/admin/attendance" element={<AdminAttendance />} />
       <Route path="/notifications" element={<Notifications />} />
@@ -68,4 +71,4 @@ function App() {
   );
 }
 
-export default App;
+export default App

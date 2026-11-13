@@ -12,6 +12,7 @@ const notificationRouter = require('./routes/notificationRoutes');
 const healthRouter = require('./routes/healthRoutes');
 const registrationRouter = require('./routes/registrationRoutes');
 const { startReminderJob } = require('./services/reminderJob');
+const errorHandler = require('./middleware/errorHandler');
 
 dotenv.config();
 
@@ -67,6 +68,7 @@ app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/health', healthRouter);
 
+<<<<<<< HEAD
 function handleError(err, req, res, next) {
   const statusCode =
     err.statusCode >= 400 && err.statusCode < 500
@@ -87,6 +89,9 @@ function handleError(err, req, res, next) {
 }
 
 app.use(handleError);
+=======
+app.use(errorHandler);
+>>>>>>> 398e39a25ccea38efe329fce39a0d87eb6e079f3
 
 function validateEnvironment() {
   const required = ['MONGO_URI', 'JWT_SECRET'];

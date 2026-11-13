@@ -6,8 +6,10 @@ import {
   getMyEvents,
   updateEvent,
   cancelEvent,
-  getCurrentUser,
+  getNotifications,
+  markNotificationAsRead,
 } from '../services/api';
+import useAuth from '../context/useAuth';
 
 const emptyForm = {
   title: '',
@@ -66,9 +68,7 @@ function toFormData(event) {
 }
 
 function OrganizerEvents() {
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authError, setAuthError] = useState('');
+  const { user, loading: authLoading, error: authError } = useAuth();
 
   const [events, setEvents] = useState([]);
   const [form, setForm] = useState(emptyForm);
@@ -77,6 +77,9 @@ function OrganizerEvents() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [decisionNotifications, setDecisionNotifications] = useState([]);
+  const [markingNotificationId, setMarkingNotificationId] = useState(null);
+  const [cancellingEventId, setCancellingEventId] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const formRef = useRef(null);
 
@@ -96,53 +99,6 @@ function OrganizerEvents() {
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  // Verify the current login.
-  useEffect(() => {
-    let active = true;
-
-    async function checkAuthentication() {
-      try {
-        const response = await getCurrentUser();
-
-        if (!active) return;
-
-        const currentUser = response.data?.user;
-
-        if (!currentUser) {
-          setAuthError(
-            'Your session could not be verified. Please log in again.'
-          );
-          return;
-        }
-
-        setUser(currentUser);
-      } catch (err) {
-        if (!active) return;
-
-        if (err.response?.status === 401) {
-          setAuthError(
-            'Your session has expired. Please log in again.'
-          );
-        } else {
-          setAuthError(
-            err.response?.data?.message ||
-              'Could not verify your login. Check that the backend is running.'
-          );
-        }
-      } finally {
-        if (active) {
-          setAuthLoading(false);
-        }
-      }
-    }
-
-    checkAuthentication();
-
-    return () => {
-      active = false;
-    };
   }, []);
 
   // Fetch events after authentication has completed.
@@ -184,6 +140,38 @@ function OrganizerEvents() {
       active = false;
     };
   }, [user, authLoading]);
+
+  useEffect(() => {
+    if (authLoading || user?.role !== 'Organizer') return;
+
+    let active = true;
+
+    async function fetchDecisionNotifications() {
+      try {
+        const response = await getNotifications();
+        if (active) {
+          setDecisionNotifications(
+            (response.data?.notifications || []).filter(
+              (notification) => notification.type === 'APPROVAL_DECISION',
+            ),
+          );
+        }
+      } catch (requestError) {
+        if (active) {
+          setError(
+            requestError.response?.data?.message ||
+              'Could not load event decision notifications.',
+          );
+        }
+      }
+    }
+
+    fetchDecisionNotifications();
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, user]);
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -240,17 +228,20 @@ function OrganizerEvents() {
     };
 
     try {
+      let response;
       if (editingId) {
-        await updateEvent(editingId, payload);
+        response = await updateEvent(editingId, payload);
       } else {
-        await createEvent(payload);
+        response = await createEvent(payload);
       }
 
-      setMessage(
-        isDraft
+      const savedStatus = response.data?.event?.status;
+      const retainedPublishedEvent = isDraft && savedStatus === 'Pending Approval';
+      setMessage(retainedPublishedEvent
+        ? 'Changes saved. The previously approved version remains published while these changes await approval.'
+        : isDraft
           ? 'Draft saved successfully.'
-          : 'Event submitted for approval.'
-      );
+          : 'Event submitted for approval.');
 
       resetForm();
       await loadEvents();
@@ -274,13 +265,51 @@ function OrganizerEvents() {
     formRef.current?.elements.title?.focus();
   }
 
+  function getDecisionNotification(eventId) {
+    return decisionNotifications.find((notification) => {
+      const notificationEventId = typeof notification.event === 'object'
+        ? notification.event?._id
+        : notification.event;
+      return String(notificationEventId) === String(eventId);
+    });
+  }
+
+  async function handleMarkNotificationAsRead(notification) {
+    if (notification.read || markingNotificationId) return;
+
+    setMarkingNotificationId(notification._id);
+    setError('');
+
+    try {
+      const response = await markNotificationAsRead(notification._id);
+      const updatedNotification = response.data?.notification;
+      setDecisionNotifications((previous) =>
+        previous.map((item) =>
+          item._id === notification._id
+            ? updatedNotification || { ...item, read: true }
+            : item,
+        ),
+      );
+    } catch (requestError) {
+      setError(
+        requestError.response?.data?.message ||
+          'Could not update the notification.',
+      );
+    } finally {
+      setMarkingNotificationId(null);
+    }
+  }
+
   async function handleCancel(id) {
+    if (cancellingEventId) return;
+
     const confirmed = window.confirm(
       'Are you sure you want to cancel this event?'
     );
 
     if (!confirmed) return;
 
+    setCancellingEventId(id);
     setError('');
     setMessage('');
 
@@ -293,6 +322,8 @@ function OrganizerEvents() {
         err.response?.data?.message ||
           'Could not cancel the event.'
       );
+    } finally {
+      setCancellingEventId(null);
     }
   }
 
@@ -433,57 +464,86 @@ function OrganizerEvents() {
           <p>You have not created any events yet.</p>
         )}
 
-        {events.map((event) => (
-          <article
-            className="event-list-item"
-            key={event._id}
-          >
-            <h3>{event.title || 'Untitled draft'}</h3>
+        {events.map((event) => {
+          const decisionNotification = getDecisionNotification(event._id);
 
-            <p>
-              Status: <strong>{event.status}</strong>
-            </p>
+          return (
+            <article className="event-list-item" key={event._id}>
+              <h3>{event.title || 'Untitled draft'}</h3>
 
-            {event.venue && <p>Venue: {event.venue}</p>}
-
-            {event.startDateTime && (
               <p>
-                Starts:{' '}
-                {new Date(
-                  event.startDateTime
-                ).toLocaleString()}
+                Status: <strong>{event.status}</strong>
               </p>
-            )}
+              {event.status === 'Pending Approval' && (
+                <p>Your event is awaiting administrator review and cannot be edited until a decision is made.</p>
+              )}
+              {(event.status === 'Rejected' || event.status === 'Changes Requested') && (
+                <p>You can edit this event and submit it again for review.</p>
+              )}
+              {event.approvedSnapshot && event.status !== 'Approved' && (
+                <p>The last approved version remains public while these changes are not approved.</p>
+              )}
+              {decisionNotification && (
+                <div className="event-decision-notice" role="status">
+                  <p>
+                    <strong>{decisionNotification.title}:</strong>{' '}
+                    {decisionNotification.message}
+                  </p>
+                  <p>{decisionNotification.read ? 'Read' : 'Unread'}</p>
+                  {!decisionNotification.read && (
+                    <button
+                      className="auth-button secondary-button"
+                      type="button"
+                      disabled={markingNotificationId === decisionNotification._id}
+                      onClick={() => handleMarkNotificationAsRead(decisionNotification)}
+                    >
+                      {markingNotificationId === decisionNotification._id
+                        ? 'Saving...'
+                        : 'Mark as read'}
+                    </button>
+                  )}
+                </div>
+              )}
 
-            {event.status === 'Approved' && (
-              <p>
-                <Link className="event-link" to={`/organizer/events/${event._id}/attendance`}>
-                  Take attendance
-                </Link>
-              </p>
-            )}
+              {event.venue && <p>Venue: {event.venue}</p>}
+              {event.status === 'Approved' && (
+                <p><Link className="event-link" to={`/organizer/events/${event._id}/attendance`}>Take attendance</Link></p>
+              )}
 
-            {event.status !== 'Cancelled' && (
-              <div className="event-actions">
-                <button
-                  className="auth-button"
-                  type="button"
-                  onClick={() => startEditing(event)}
-                >
-                  Edit
-                </button>
+              {event.startDateTime && (
+                <p>
+                  Starts:{' '}
+                  {new Date(
+                    event.startDateTime
+                  ).toLocaleString()}
+                </p>
+              )}
 
-                <button
-                  className="auth-button secondary-button"
-                  type="button"
-                  onClick={() => handleCancel(event._id)}
-                >
-                  Cancel event
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
+              {event.status !== 'Cancelled' && (
+                <div className="event-actions">
+                  {event.status !== 'Pending Approval' && (
+                    <button
+                      className="auth-button"
+                      type="button"
+                      onClick={() => startEditing(event)}
+                    >
+                      Edit
+                    </button>
+                  )}
+
+                  <button
+                    className="auth-button secondary-button"
+                    type="button"
+                    disabled={cancellingEventId === event._id}
+                    onClick={() => handleCancel(event._id)}
+                  >
+                    {cancellingEventId === event._id ? 'Cancelling...' : 'Cancel event'}
+                  </button>
+                </div>
+              )}
+            </article>
+          )
+        })}
       </section>
     </main>
   );

@@ -1,5 +1,6 @@
 
 const nodemailer = require('nodemailer');
+const User = require('../models/User');
 
 let transporter;
 
@@ -46,8 +47,27 @@ async function sendNotificationEmail(to, subject, message) {
     });
   } catch (error) {
     // Email failure must not undo the underlying application action.
-    console.error('Notification email delivery failed:', error.message);
+    console.error('Notification email delivery failed:', error.name || 'Error');
   }
 }
 
-module.exports = { sendNotificationEmail };
+async function sendEmailToUsers(userIds, subject, message) {
+  if (!userIds.length || !process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return;
+  }
+
+  try {
+    const recipients = await User.find({
+      _id: { $in: [...new Set(userIds.map(String))] },
+    }).select('email');
+
+    await Promise.all(recipients.map((user) =>
+      sendNotificationEmail(user.email, subject, message)
+    ));
+  } catch (error) {
+    // A failed lookup or delivery must not undo the event action.
+    console.error('Notification email lookup failed:', error.name || 'Error');
+  }
+}
+
+module.exports = { sendNotificationEmail, sendEmailToUsers };

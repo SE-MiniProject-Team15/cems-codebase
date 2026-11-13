@@ -1,5 +1,6 @@
 
 const express = require('express');
+const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -12,7 +13,7 @@ router.get('/', async (req, res, next) => {
   try {
     const notifications = await Notification.find({
       recipient: req.user._id,
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1, _id: -1 });
 
     return res.json({
       status: 'success',
@@ -25,6 +26,13 @@ router.get('/', async (req, res, next) => {
 
 // Mark one of the logged-in user's notifications as read.
 router.patch('/:id/read', async (req, res, next) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({
+      status: 'fail',
+      message: 'Invalid notification ID',
+    });
+  }
+
   try {
     const notification = await Notification.findOneAndUpdate(
       {
@@ -32,7 +40,7 @@ router.patch('/:id/read', async (req, res, next) => {
         recipient: req.user._id,
       },
       { read: true },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!notification) {

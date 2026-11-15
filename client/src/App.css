@@ -229,6 +229,87 @@
   padding: 10px 12px;
 }
 
+.feedback-event-list {
+  display: grid;
+  gap: 16px;
+}
+
+.feedback-card {
+  background: var(--surface);
+}
+
+.feedback-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.feedback-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.feedback-form label,
+.feedback-form legend {
+  font-weight: 650;
+}
+
+.feedback-form textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: var(--text-h);
+  font: inherit;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.feedback-stars {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.feedback-star {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 2rem;
+  padding: 0 4px;
+}
+
+.feedback-star.selected {
+  color: #b54708;
+}
+
+.feedback-report {
+  margin-top: 16px;
+}
+
+.feedback-distribution,
+.feedback-comments {
+  padding-left: 20px;
+}
+
+.feedback-comments li {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 8px;
+}
+
+.feedback-comments p {
+  white-space: pre-wrap;
+}
+
+.feedback-comments time {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
 @media (max-width: 480px) {
   .auth-card {
     padding: 26px 22px;

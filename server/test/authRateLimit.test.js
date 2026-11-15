@@ -4,22 +4,16 @@ const authRateLimit = require('../middleware/authRateLimit');
 
 function response() {
   return {
-<<<<<<< HEAD
-    statusCode: 200,
     headers: {},
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    set(name, value) {
-      this.headers[name] = value;
-      return this;
-    },
-    json(payload) {
-      this.payload = payload;
-      return this;
-    },
+    statusCode: 200,
+    set(name, value) { this.headers[name] = value; return this; },
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.payload = payload; return this; },
   };
+}
+
+function request(ip) {
+  return { ip, socket: { remoteAddress: 'fallback' } };
 }
 
 test('authentication requests are rate limited after the configured window quota', () => {
@@ -46,18 +40,7 @@ test('authentication requests are rate limited after the configured window quota
   assert.equal(nextCalled, false);
   assert.equal(res.statusCode, 429);
   assert.ok(Number(res.headers['Retry-After']) > 0);
-=======
-    headers: {},
-    statusCode: 200,
-    set(name, value) { this.headers[name] = value; return this; },
-    status(code) { this.statusCode = code; return this; },
-    json(payload) { this.payload = payload; return this; },
-  };
-}
-
-function request(ip) {
-  return { ip, socket: { remoteAddress: 'fallback' } };
-}
+});
 
 test('rate limiter validates its endpoint and allows requests within a window', () => {
   assert.throws(() => authRateLimit(), /endpoint ID is required/);
@@ -118,5 +101,4 @@ test('rate limiter evicts expired keys when at capacity and rejects when still f
   middleware(request('203.0.113.after'), afterCleanup, () => { passed = true; });
   assert.equal(afterCleanup.statusCode, 200);
   assert.equal(passed, true);
->>>>>>> 398e39a25ccea38efe329fce39a0d87eb6e079f3
 });

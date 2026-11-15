@@ -11,6 +11,7 @@ const eventRouter = require('./routes/eventRoutes');
 const notificationRouter = require('./routes/notificationRoutes');
 const healthRouter = require('./routes/healthRoutes');
 const registrationRouter = require('./routes/registrationRoutes');
+const feedbackRouter = require('./routes/feedbackRoutes');
 const { startReminderJob } = require('./services/reminderJob');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -63,35 +64,12 @@ app.use(cookieParser());
 // Application routes
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api', feedbackRouter);
 app.use('/api/events', eventRouter);
 app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/health', healthRouter);
-
-<<<<<<< HEAD
-function handleError(err, req, res, next) {
-  const statusCode =
-    err.statusCode >= 400 && err.statusCode < 500
-      ? err.statusCode
-      : 500;
-
-  if (statusCode === 500) {
-    console.error('Request failed:', err);
-  }
-
-  return res.status(statusCode).json({
-    status: 'error',
-    message:
-      statusCode === 500
-        ? 'Internal server error'
-        : err.message,
-  });
-}
-
-app.use(handleError);
-=======
 app.use(errorHandler);
->>>>>>> 398e39a25ccea38efe329fce39a0d87eb6e079f3
 
 function validateEnvironment() {
   const required = ['MONGO_URI', 'JWT_SECRET'];
@@ -136,4 +114,4 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.validateEnvironment = validateEnvironment;
-module.exports.handleError = handleError;
+module.exports.handleError = errorHandler;

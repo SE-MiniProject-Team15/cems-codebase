@@ -87,6 +87,26 @@ export function getAttendanceOverview() {
   return api.get('/events/attendance/overview').then(getPayload);
 }
 
+export function getEligibleFeedbackEvents() {
+  return api.get('/feedback/eligible').then(getPayload)
+}
+
+export function submitEventFeedback(eventId, data) {
+  return api.post(`/events/${encodeURIComponent(eventId)}/feedback`, data).then(getPayload)
+}
+
+export function getMyEventFeedback(eventId) {
+  return api.get(`/events/${encodeURIComponent(eventId)}/feedback/me`).then(getPayload)
+}
+
+export function getEventFeedback(eventId) {
+  return api.get(`/events/${encodeURIComponent(eventId)}/feedback`).then(getPayload)
+}
+
+export function getAdminFeedbackSummary() {
+  return api.get('/admin/feedback/summary').then(getPayload)
+}
+
 export function getNotifications() {
   return api.get('/notifications').then(getPayload)
 }

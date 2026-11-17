@@ -11,6 +11,7 @@ const eventRouter = require('./routes/eventRoutes');
 const notificationRouter = require('./routes/notificationRoutes');
 const healthRouter = require('./routes/healthRoutes');
 const registrationRouter = require('./routes/registrationRoutes');
+const feedbackRouter = require('./routes/feedbackRoutes');
 const { startReminderJob } = require('./services/reminderJob');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -63,11 +64,11 @@ app.use(cookieParser());
 // Application routes
 app.use('/api/auth', authRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api', feedbackRouter);
 app.use('/api/events', eventRouter);
 app.use('/api/registrations', registrationRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/health', healthRouter);
-
 app.use(errorHandler);
 
 function validateEnvironment() {

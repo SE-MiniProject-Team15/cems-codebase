@@ -1,0 +1,38 @@
+{
+  "executedAt": "2026-11-13T18:31:29.852Z",
+  "commit": "d735cc5d17d8c9464a08e3ade365a745a7cb1c30",
+  "node": "v20.20.2",
+  "results": [
+    {
+      "name": "Account registration, login cookies, identity and role restrictions",
+      "status": "PASS"
+    },
+    {
+      "name": "Event submission, approval transaction, audit and publication",
+      "status": "PASS"
+    },
+    {
+      "name": "Registration capacity, duplicate prevention, waitlist and promotion",
+      "status": "PASS"
+    },
+    {
+      "name": "Notification ownership, read persistence and real SMTP delivery",
+      "status": "PASS"
+    },
+    {
+      "name": "Reminder persistence, SMTP delivery and duplicate suppression",
+      "status": "PASS"
+    },
+    {
+      "name": "Live browser login and event discovery through real API and database",
+      "status": "PASS"
+    },
+    {
+      "name": "Attendance check-in, duplicate prevention and persisted attendance",
+      "status": "PASS"
+    }
+  ],
+  "passed": 7,
+  "failed": 0,
+  "exitCode": 0
+}

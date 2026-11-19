@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
@@ -466,7 +466,7 @@ test('checkInStudent rejects missing, ineligible and previously checked-in ticke
   result = await call(checkInStudent, request);
   assert.equal(result.res.statusCode, 404);
 
-  item.registrations.id = () => ({ status: 'Registered', attendedAt: new Date(), student: studentId });
+  item.registrations.id = () => ({ status: 'Registered', registrationCode, attendedAt: new Date(), student: studentId });
   result = await call(checkInStudent, request);
   assert.equal(result.res.statusCode, 409);
 });
@@ -475,7 +475,7 @@ test('checkInStudent atomically records attendance once', async (t) => {
   restore(t, Event, ['findById', 'updateOne']);
   restore(t, EventAuditLog, ['create']);
   EventAuditLog.create = async (record) => record;
-  const registration = { status: 'Registered', student: studentId, attendedAt: null };
+  const registration = { status: 'Registered', registrationCode, student: studentId, attendedAt: null };
   const item = event({
     status: 'Approved',
     startDateTime: new Date(Date.now() - 30_000),

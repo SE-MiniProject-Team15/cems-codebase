@@ -1,4 +1,4 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
@@ -142,6 +142,7 @@ test('a re-scan is rejected without writing a second attendance record', async (
   const fixture = attendanceFixture();
   fixture.event.registrations.id = () => ({
     status: 'Registered',
+    registrationCode: fixture.registrationCode,
     attendedAt: new Date(),
   });
   const getUpdate = installEventMocks(t, fixture.event);

@@ -18,6 +18,12 @@ export function logoutUser() {
 export function getCurrentUser() {
   return api.get('/auth/me').then(getPayload)
 }
+export function requestPasswordReset(email) {
+  return api.post('/auth/forgot-password', { email }).then(getPayload)
+}
+export function resetPassword(token, password) {
+  return api.post(`/auth/reset-password/${encodeURIComponent(token)}`, { password }).then(getPayload)
+}
 
 export function createEvent(data) {
   return api.post('/events', data).then(getPayload)
@@ -85,6 +91,9 @@ export function getEventAttendance(eventId) {
 
 export function getAttendanceOverview() {
   return api.get('/events/attendance/overview').then(getPayload);
+}
+export function getAdminAuditLogs() {
+  return api.get('/events/admin/audit-logs').then(getPayload)
 }
 
 export function getEligibleFeedbackEvents() {

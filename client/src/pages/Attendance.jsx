@@ -190,7 +190,7 @@ function OrganizerAttendance() {
           <CheckInScanner onCode={checkIn} />
           <form className="attendance-code-form" onSubmit={(event) => { event.preventDefault(); checkIn(code); }}>
             <label htmlFor="attendance-code">Registration code</label>
-            <input id="attendance-code" value={code} onChange={(event) => setCode(event.target.value)} autoComplete="off" maxLength={160} placeholder="Paste or scan the ticket QR code" />
+            <input id="attendance-code" value={code} onChange={(event) => setCode(event.target.value)} autoComplete="off" maxLength={160} placeholder="Enter registration code or paste/scan the QR ticket" />
             <button className="auth-button" type="submit" disabled={busy || !code}>{busy ? 'Checking in...' : 'Record attendance'}</button>
           </form>
           {message && <p role="status">{message}</p>}

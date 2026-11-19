@@ -37,6 +37,7 @@ test('event creation, approval, check-in, and attendance routes enforce roles', 
   const roleGates = [
     { path: '/', method: 'post', allowed: 'Organizer', denied: 'Student' },
     { path: '/:id/approve', method: 'patch', allowed: 'Admin', denied: 'Student' },
+    { path: '/admin/audit-logs', method: 'get', allowed: 'Admin', denied: 'Student' },
     {
       path: '/:eventId/attendance/check-in',
       method: 'post',

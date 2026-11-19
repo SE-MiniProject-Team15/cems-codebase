@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import useAuth from '../context/useAuth'
 
 function Login() {
   const { login, error } = useAuth()
+  const location = useLocation()
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
@@ -37,6 +38,9 @@ function Login() {
         <p className="auth-eyebrow">College Event Management System</p>
         <h1>Welcome back</h1>
         <p className="auth-description">Log in to find and manage campus events.</p>
+        {location.state?.registrationSuccess && (
+          <p className="registration-success" role="status">Registration successful</p>
+        )}
 
         <form aria-busy={submitting} className="auth-form" onSubmit={handleSubmit}>
           <label htmlFor="login-email">Email</label>
@@ -65,6 +69,7 @@ function Login() {
           </button>
         </form>
 
+        <p className="auth-switch"><Link to="/forgot-password">Forgot Password?</Link></p>
         <p className="auth-switch">
           New to CEMS? <Link to="/register">Create an account</Link>
         </p>

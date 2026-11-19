@@ -8,6 +8,8 @@ import Notifications from './pages/Notifications';
 import { AdminAttendance, OrganizerAttendance } from './pages/Attendance';
 import { EventBrowser, EventDetails } from './pages/Events';
 import StudentRegistrations from './pages/StudentRegistrations';
+import { ForgotPassword, ResetPassword } from './pages/PasswordRecovery';
+import AdminAuditLog from './pages/AdminAuditLog';
 import { AdminFeedback, OrganizerFeedback, StudentFeedback } from './pages/Feedback';
 import useAuth from './context/useAuth';
 import './App.css';
@@ -42,6 +44,7 @@ function Dashboard({ role }) {
         {role === 'Admin' && <Link className="auth-button" to="/admin/events/review">Review events</Link>}
         {role === 'Admin' && <Link className="auth-button" to="/admin/attendance">View attendance</Link>}
         {role === 'Admin' && <Link className="auth-button" to="/admin/feedback">Feedback summary</Link>}
+        {role === 'Admin' && <Link className="auth-button" to="/admin/audit-log">Audit Log</Link>}
         <Link className="auth-button" to="/notifications">View Notifications</Link>
         <button className="auth-button" type="button" onClick={logout}>Log out</button>
       </section>
@@ -57,6 +60,8 @@ function App() {
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/student/dashboard" element={<Dashboard role="Student" />} />
       <Route path="/organizer/dashboard" element={<Dashboard role="Organizer" />} />
       <Route path="/admin/dashboard" element={<Dashboard role="Admin" />} />
@@ -65,6 +70,7 @@ function App() {
       <Route path="/admin/events/review" element={<AdminEventReview />} />
       <Route path="/organizer/events/:eventId/attendance" element={<OrganizerAttendance />} />
       <Route path="/admin/attendance" element={<AdminAttendance />} />
+      <Route path="/admin/audit-log" element={<AdminAuditLog />} />
       <Route path="/student/feedback" element={<StudentFeedback />} />
       <Route path="/organizer/feedback" element={<OrganizerFeedback />} />
       <Route path="/admin/feedback" element={<AdminFeedback />} />

@@ -72,18 +72,13 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (userData) => {
     setError(null)
     try {
-      const registrationResponse = await registerRequest(userData)
-      let authenticatedUser = normalizeAuthUser(registrationResponse, userData.role || 'Student')
-
-      if (!authenticatedUser) {
-        const loginResponse = await loginRequest(userData)
-        authenticatedUser = normalizeAuthUser(loginResponse, userData.role || 'Student')
-      }
-
-      setUser(authenticatedUser)
-      const dashboardPath = getDashboardPath(authenticatedUser) || '/login'
-      navigate(dashboardPath, { replace: true })
-      return authenticatedUser
+      await registerRequest(userData)
+      setUser(null)
+      navigate('/login', {
+        replace: true,
+        state: { registrationSuccess: true },
+      })
+      return null
     } catch (requestError) {
       setError(getErrorMessage(requestError))
       throw requestError

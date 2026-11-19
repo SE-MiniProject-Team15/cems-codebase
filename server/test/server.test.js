@@ -66,12 +66,16 @@ test('production middleware requires HTTPS and sets security headers', async (t)
   process.env.NODE_ENV = 'production';
 
   await withServer(t, async (base) => {
-    const httpResponse = await fetch(`${base}/api/health`);
-    assert.equal(httpResponse.status, 400);
-    assert.equal((await httpResponse.json()).message, 'HTTPS is required');
+    const httpResponse = await fetch(`${base}/api/health`, {
+      redirect: 'manual',
+      headers: { 'X-Forwarded-Proto': 'http' },
+    });
+    assert.equal(httpResponse.status, 308);
+    assert.equal(httpResponse.headers.get('location'), `https://${new URL(base).host}/api/health`);
     assert.equal(httpResponse.headers.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
     assert.equal(httpResponse.headers.get('x-frame-options'), 'DENY');
     assert.equal(httpResponse.headers.get('x-content-type-options'), 'nosniff');
+    assert.match(httpResponse.headers.get('content-security-policy'), /frame-ancestors 'none'/);
     assert.equal(httpResponse.headers.get('referrer-policy'), 'no-referrer');
     assert.equal(httpResponse.headers.get('permissions-policy'), 'camera=(), microphone=(), geolocation=()');
 
@@ -80,6 +84,28 @@ test('production middleware requires HTTPS and sets security headers', async (t)
     });
     assert.equal(httpsResponse.status, 200);
     assert.equal(httpsResponse.headers.get('x-powered-by'), null);
+    assert.ok(httpsResponse.headers.get('x-request-id'));
+  });
+});
+
+test('foreign origins cannot submit state-changing requests and errors include request IDs', async (t) => {
+  preserveEnvironment(t);
+  process.env.NODE_ENV = 'development';
+
+  await withServer(t, async (base) => {
+    const result = await fetch(`${base}/api/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://evil.example.com',
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    const body = await result.json();
+    assert.equal(result.status, 403);
+    assert.equal(body.requestId, result.headers.get('x-request-id'));
+    assert.match(body.message, /cross-origin/i);
+    assert.match(result.headers.get('content-security-policy'), /default-src 'self'/);
   });
 });
 

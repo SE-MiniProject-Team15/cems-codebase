@@ -9,8 +9,10 @@ const { registerForEvent } = require('../controllers/registrationController');
 test('registration keeps its in-app notice and succeeds when SMTP delivery fails', async (t) => {
   const original = {
     findOne: Event.findOne,
+    findOneAndUpdate: Event.findOneAndUpdate,
     create: Notification.create,
     find: User.find,
+    findById: User.findById,
     createTransport: nodemailer.createTransport,
     error: console.error,
     env: {
@@ -21,8 +23,10 @@ test('registration keeps its in-app notice and succeeds when SMTP delivery fails
   };
   t.after(() => {
     Event.findOne = original.findOne;
+    Event.findOneAndUpdate = original.findOneAndUpdate;
     Notification.create = original.create;
     User.find = original.find;
+    User.findById = original.findById;
     nodemailer.createTransport = original.createTransport;
     console.error = original.error;
     for (const [key, value] of Object.entries(original.env)) {
@@ -54,8 +58,17 @@ test('registration keeps its in-app notice and succeeds when SMTP delivery fails
     async save() { saved = true; },
   };
   Event.findOne = () => ({ select: async () => event });
+  Event.findOneAndUpdate = (filter, update) => ({
+    select: async () => {
+      saved = true;
+      event.registrations.push(update.$push.registrations);
+      event.registeredStudents.push(update.$addToSet.registeredStudents);
+      return event;
+    },
+  });
   Notification.create = async (notice) => { notices.push(notice); return notice; };
   User.find = () => ({ select: async () => [{ email: 'student@example.test' }] });
+  User.findById = () => ({ select: async () => ({ email: 'student@example.test' }) });
   nodemailer.createTransport = () => ({
     async sendMail(mail) {
       attemptedEmail = mail;
@@ -74,12 +87,15 @@ test('registration keeps its in-app notice and succeeds when SMTP delivery fails
     res,
     (error) => { throw error; }
   );
+  await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(res.statusCode, 201);
   assert.equal(res.payload.data.registration.status, 'Registered');
   assert.equal(saved, true);
   assert.equal(notices[0].type, 'REGISTRATION_CONFIRMATION');
   assert.equal(attemptedEmail.to, 'student@example.test');
-  assert.match(attemptedEmail.text, /Campus workshop/);
+  assert.match(attemptedEmail.text, /Registration code:/);
+  assert.ok(Buffer.isBuffer(attemptedEmail.attachments[0].content));
+  assert.equal(attemptedEmail.attachments[0].cid, 'cems-registration-ticket');
   assert.ok(logs.some((line) => line.includes('Notification email delivery failed')));
 });

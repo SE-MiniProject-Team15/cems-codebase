@@ -390,6 +390,41 @@ test('the owning organizer can resubmit an event after changes were requested', 
     status: 'Changes Requested',
     approvedSnapshot: { ...details, title: 'Published title' },
   })
+
+  test('the owning organizer can edit a pending event without changing its review status', async (t) => {
+    const originals = { findOne: Event.findOne, exists: Event.exists };
+    const event = makeEvent();
+    Event.findOne = () => queryFor(event);
+    Event.exists = async () => null;
+    t.after(() => {
+      Event.findOne = originals.findOne;
+      Event.exists = originals.exists;
+    });
+
+    const res = response();
+    await updateEvent(
+      {
+        params: { id: eventId },
+        user: { _id: organizerId },
+        body: { description: 'Updated event details', capacity: 250 },
+      },
+      res,
+      (error) => { throw error },
+    );
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(event.description, 'Updated event details');
+    assert.equal(event.capacity, 250);
+    assert.equal(event.status, 'Pending Approval');
+  });
+
+  test('event audit records define immutable actor, target, action and timestamp fields', () => {
+    assert.equal(EventAuditLog.schema.path('actor').options.immutable, true);
+    assert.equal(EventAuditLog.schema.path('targetType').options.immutable, true);
+    assert.equal(EventAuditLog.schema.path('targetId').options.immutable, true);
+    assert.equal(EventAuditLog.schema.path('action').enumValues.includes('CHECK_IN'), true);
+    assert.equal(EventAuditLog.schema.path('timestamp').options.immutable, true);
+  });
   Event.findOne = () => queryFor(event)
   Event.exists = async () => null
   t.after(() => {

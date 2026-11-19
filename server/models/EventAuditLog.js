@@ -5,6 +5,12 @@ const eventAuditLogSchema = new mongoose.Schema(
     administrator: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      immutable: true,
+      index: true,
+    },
+    actor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
       required: true,
       immutable: true,
       index: true,
@@ -18,8 +24,29 @@ const eventAuditLogSchema = new mongoose.Schema(
     },
     action: {
       type: String,
-      enum: ['APPROVE', 'REJECT', 'REQUEST_CHANGES'],
+      enum: ['APPROVE', 'REJECT', 'REQUEST_CHANGES', 'CHECK_IN'],
       required: true,
+      immutable: true,
+    },
+    targetType: {
+      type: String,
+      enum: ['Event', 'Registration'],
+      required: true,
+      immutable: true,
+    },
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      immutable: true,
+      index: true,
+    },
+    details: {
+      type: mongoose.Schema.Types.Mixed,
+      immutable: true,
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now,
       immutable: true,
     },
     comment: {
@@ -35,6 +62,7 @@ const eventAuditLogSchema = new mongoose.Schema(
 );
 
 eventAuditLogSchema.index({ event: 1, createdAt: -1 });
+eventAuditLogSchema.index({ targetType: 1, targetId: 1, createdAt: -1 });
 
 eventAuditLogSchema.pre('save', function preventAuditOverwrite() {
   if (!this.isNew) {

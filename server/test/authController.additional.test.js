@@ -68,7 +68,7 @@ test('registration rejects duplicate email and disallowed roles', async (t) => {
   }
 });
 
-test('registration creates normalized student and organizer accounts with auth cookies', async (t) => {
+test('registration creates normalized student and organizer accounts without signing them in', async (t) => {
   restore(t, [[User, 'findOne'], [User, 'create'], [jwt, 'sign']]);
   const originalSecret = process.env.JWT_SECRET;
   t.after(() => {
@@ -98,10 +98,8 @@ test('registration creates normalized student and organizer accounts with auth c
     assert.deepEqual(res.payload.data.user, {
       id: String(created.length), name: 'Test Person', email: 'person@example.test', role: expected,
     });
-    assert.equal(res.cookies[0][0], 'token');
-    assert.equal(res.cookies[0][1], `token-${expected}`);
-    assert.equal(res.cookies[0][2].httpOnly, true);
-    assert.equal(res.cookies[0][2].sameSite, 'strict');
+    assert.equal(res.payload.message, 'Registration successful');
+    assert.equal(res.cookies.length, 0);
   }
 });
 
@@ -223,7 +221,8 @@ test('active lockout rejects login without checking the password', async () => {
   });
 
   const res = await loginAs(user, 'correct-password');
-  assert.equal(res.statusCode, 401);
+  assert.equal(res.statusCode, 423);
+  assert.equal(res.payload.message, 'Account locked, try again later');
   assert.equal(passwordChecked, false);
   assert.equal(user.saveCalls, 0);
 });

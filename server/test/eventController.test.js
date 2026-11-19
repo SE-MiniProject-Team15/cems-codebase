@@ -1,7 +1,8 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
+const EventAuditLog = require('../models/EventAuditLog');
 const Notification = require('../models/Notification');
 const {
   createEvent,
@@ -15,6 +16,7 @@ const {
   checkInStudent,
   listAttendance,
   listAttendanceOverview,
+  listAdminAuditLogs,
 } = require('../controllers/eventController');
 
 const eventId = '507f1f77bcf86cd799439011';
@@ -118,6 +120,21 @@ test('createEvent forwards persistence failures', async (t) => {
     body: details(), user: { _id: organizerId },
   });
   assert.equal(result.nextError, failure);
+});
+
+test('event creation strips executable HTML from stored event text', async (t) => {
+  restore(t, Event, ['create', 'exists']);
+  Event.exists = async () => false;
+  Event.create = async (value) => value;
+  const result = await call(createEvent, {
+    body: details({
+      description: '<img src=x onerror=alert(1)>Useful <script>alert(2)</script> workshop',
+    }),
+    user: { _id: organizerId },
+  });
+
+  assert.equal(result.res.statusCode, 201);
+  assert.doesNotMatch(result.res.payload.data.event.description, /<script|onerror|<img/i);
 });
 
 test('listMyEvents returns selected events and forwards query errors', async (t) => {
@@ -449,14 +466,16 @@ test('checkInStudent rejects missing, ineligible and previously checked-in ticke
   result = await call(checkInStudent, request);
   assert.equal(result.res.statusCode, 404);
 
-  item.registrations.id = () => ({ status: 'Registered', attendedAt: new Date(), student: studentId });
+  item.registrations.id = () => ({ status: 'Registered', registrationCode, attendedAt: new Date(), student: studentId });
   result = await call(checkInStudent, request);
   assert.equal(result.res.statusCode, 409);
 });
 
 test('checkInStudent atomically records attendance once', async (t) => {
   restore(t, Event, ['findById', 'updateOne']);
-  const registration = { status: 'Registered', student: studentId, attendedAt: null };
+  restore(t, EventAuditLog, ['create']);
+  EventAuditLog.create = async (record) => record;
+  const registration = { status: 'Registered', registrationCode, student: studentId, attendedAt: null };
   const item = event({
     status: 'Approved',
     startDateTime: new Date(Date.now() - 30_000),
@@ -539,6 +558,29 @@ test('listAttendanceOverview summarizes events and forwards query errors', async
       { status: 'Registered', attendedAt: new Date() },
       { status: 'Waitlisted', attendedAt: new Date() },
     ],
+  });
+
+  test('Admin audit endpoint returns actor, action, target and timestamp entries', async (t) => {
+    restore(t, EventAuditLog, ['find']);
+    const record = {
+      actor: { name: 'Admin' },
+      action: 'APPROVE',
+      targetType: 'Event',
+      targetId: eventId,
+      timestamp: new Date(),
+    };
+    EventAuditLog.find = () => ({
+      sort() { return this; },
+      limit(count) { assert.equal(count, 500); return this; },
+      populate() { return this; },
+      then(resolve, reject) { return Promise.resolve([record]).then(resolve, reject); },
+    });
+
+    const result = await call(listAdminAuditLogs);
+    assert.equal(result.res.statusCode, 200);
+    assert.equal(result.res.payload.data.auditLogs[0].actor.name, 'Admin');
+    assert.equal(result.res.payload.data.auditLogs[0].action, 'APPROVE');
+    assert.equal(result.res.payload.data.auditLogs[0].timestamp instanceof Date, true);
   });
   Event.find = () => ({
     sort() { return this; },

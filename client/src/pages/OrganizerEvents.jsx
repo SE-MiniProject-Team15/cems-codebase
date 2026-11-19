@@ -236,9 +236,12 @@ function OrganizerEvents() {
       }
 
       const savedStatus = response.data?.event?.status;
+      const wasEditing = Boolean(editingId);
       const retainedPublishedEvent = isDraft && savedStatus === 'Pending Approval';
       setMessage(retainedPublishedEvent
         ? 'Changes saved. The previously approved version remains published while these changes await approval.'
+        : wasEditing && savedStatus === 'Pending Approval'
+          ? 'Changes saved. The event remains pending administrator approval.'
         : isDraft
           ? 'Draft saved successfully.'
           : 'Event submitted for approval.');
@@ -475,7 +478,7 @@ function OrganizerEvents() {
                 Status: <strong>{event.status}</strong>
               </p>
               {event.status === 'Pending Approval' && (
-                <p>Your event is awaiting administrator review and cannot be edited until a decision is made.</p>
+                <p>Your event is awaiting administrator review. Changes will remain pending until an administrator makes a decision.</p>
               )}
               {(event.status === 'Rejected' || event.status === 'Changes Requested') && (
                 <p>You can edit this event and submit it again for review.</p>
@@ -521,15 +524,13 @@ function OrganizerEvents() {
 
               {event.status !== 'Cancelled' && (
                 <div className="event-actions">
-                  {event.status !== 'Pending Approval' && (
-                    <button
-                      className="auth-button"
-                      type="button"
-                      onClick={() => startEditing(event)}
-                    >
-                      Edit
-                    </button>
-                  )}
+                  <button
+                    className="auth-button"
+                    type="button"
+                    onClick={() => startEditing(event)}
+                  >
+                    Edit
+                  </button>
 
                   <button
                     className="auth-button secondary-button"

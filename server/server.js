@@ -14,6 +14,8 @@ const registrationRouter = require('./routes/registrationRoutes');
 const feedbackRouter = require('./routes/feedbackRoutes');
 const { startReminderJob } = require('./services/reminderJob');
 const errorHandler = require('./middleware/errorHandler');
+const requestId = require('./middleware/requestId');
+const sanitizeRequest = require('./middleware/sanitizeRequest');
 
 dotenv.config();
 
@@ -29,6 +31,7 @@ if (trustedProxies.length) {
 }
 
 app.disable('x-powered-by');
+app.use(requestId);
 
 // Security headers and HTTPS enforcement in production.
 app.use((req, res, next) => {
@@ -37,28 +40,45 @@ app.use((req, res, next) => {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'",
   });
 
   if (process.env.NODE_ENV === 'production') {
     res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
     if (!req.secure) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'HTTPS is required',
-      });
+      const httpsUrl = new URL(req.originalUrl, `https://${req.get('host')}`);
+      return res.redirect(308, httpsUrl.toString());
     }
   }
 
   next();
 });
 
+const configuredOrigins = (process.env.CLIENT_ORIGIN || process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.get('Origin')) {
+    if (!configuredOrigins.includes(req.get('Origin'))) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Cross-origin state-changing request rejected',
+      });
+    }
+  }
+  next();
+});
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: configuredOrigins,
   credentials: true,
 }));
 
 app.use(express.json({ limit: '10kb' }));
+app.use(sanitizeRequest);
 app.use(cookieParser());
 
 // Application routes

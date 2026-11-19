@@ -73,7 +73,7 @@ function EventBrowser() {
             {item.bannerUrl && <img className="event-banner" src={item.bannerUrl} alt="" loading="lazy" />}
             <div className="event-card-body"><p className="event-category">{item.category}</p><h2><Link to={'/events/' + item.id}>{item.title}</Link></h2><p className="event-summary">{item.description}</p>
               <dl><div><dt>When</dt><dd>{dateTime(item.startDateTime)}</dd></div><div><dt>Where</dt><dd>{item.venue}</dd></div><div><dt>Department</dt><dd>{item.department}</dd></div></dl>
-              <p className="event-seats">{item.remainingSeats} seats remaining</p><Link className="event-link" to={'/events/' + item.id} aria-label={`View details for ${item.title}`}>View details</Link>
+              <p className="event-seats">{item.remainingSeats === 0 ? 'Registration full' : `${item.remainingSeats} seats remaining`}</p><Link className="event-link" to={'/events/' + item.id} aria-label={`View details for ${item.title}`}>View details</Link>
             </div>
           </article>)}
         </div>}
@@ -220,7 +220,7 @@ function EventDetails() {
                 <div><dt>Venue</dt><dd>{event.venue}</dd></div>
                 <div><dt>Department</dt><dd>{event.department}</dd></div>
                 <div><dt>Registration deadline</dt><dd>{dateTime(event.registrationDeadline)}</dd></div>
-                <div><dt>Availability</dt><dd>{event.remainingSeats} seats remaining</dd></div>
+                <div><dt>Availability</dt><dd>{event.remainingSeats === 0 ? 'Registration full' : `${event.remainingSeats} seats remaining`}</dd></div>
               </dl>
 
               <section className="registration-actions" aria-label="Event registration">
@@ -251,18 +251,21 @@ function EventDetails() {
                   </div>
                 )}
                 {!registrationLoading && !registration && registrationOpen && (
-                  <button
-                    className="auth-button"
-                    type="button"
-                    onClick={submitRegistration}
-                    disabled={registrationSubmitting}
-                  >
-                    {registrationSubmitting
-                      ? 'Submitting...'
-                      : event.remainingSeats > 0
-                        ? 'Register for event'
-                        : 'Join waitlist'}
-                  </button>
+                  <>
+                    {event.remainingSeats === 0 && <p role="status">Registration full</p>}
+                    <button
+                      className="auth-button"
+                      type="button"
+                      onClick={submitRegistration}
+                      disabled={registrationSubmitting}
+                    >
+                      {registrationSubmitting
+                        ? 'Submitting...'
+                        : event.remainingSeats > 0
+                          ? 'Register for event'
+                          : 'Join Waitlist'}
+                    </button>
+                  </>
                 )}
                 {!registrationLoading && !registration && !registrationOpen && (
                   <p>Registration is closed for this event.</p>

@@ -1,11 +1,18 @@
 const express = require('express')
-const { registerUser, loginUser } = require('../controllers/authController')
+const {
+  registerUser,
+  loginUser,
+  forgotPassword,
+  resetPassword,
+} = require('../controllers/authController')
 const { protect } = require('../middleware/authMiddleware')
 const authRateLimit = require('../middleware/authRateLimit')
 const router = express.Router()
 
 router.post('/register', authRateLimit('register'), registerUser)
 router.post('/login', authRateLimit('login'), loginUser)
+router.post('/forgot-password', authRateLimit('forgot-password'), forgotPassword)
+router.post('/reset-password/:token', authRateLimit('reset-password'), resetPassword)
 
 router.post('/logout', (req, res) => {
   res.cookie('token', '', {

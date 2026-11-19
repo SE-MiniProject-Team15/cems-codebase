@@ -71,6 +71,7 @@ function makeEvent(overrides = {}) {
 function installMocks(t, event) {
   const originals = {
     findOne: Event.findOne,
+    findOneAndUpdate: Event.findOneAndUpdate,
     find: Event.find,
     notificationCreate: Notification.create,
   };
@@ -78,6 +79,21 @@ function installMocks(t, event) {
 
   Event.findOne = () => ({
     select: async () => event,
+  });
+  Event.findOneAndUpdate = (filter, update) => ({
+    select: async () => {
+      const currentCount = event.registeredStudents.length;
+      const isWaitlistUpdate = Boolean(filter.$expr.$gte);
+      if (isWaitlistUpdate !== (currentCount >= event.capacity)) return null;
+      if (event.registrations.some(
+        (registration) =>
+          String(registration.student) === String(update.$push.registrations.student) &&
+          registration.status !== 'Cancelled'
+      )) return null;
+      event.registrations.push(update.$push.registrations);
+      if (update.$addToSet) event.registeredStudents.push(update.$addToSet.registeredStudents);
+      return event;
+    },
   });
   Event.find = () => ({
     select: async () => [event],
@@ -89,6 +105,7 @@ function installMocks(t, event) {
 
   t.after(() => {
     Event.findOne = originals.findOne;
+    Event.findOneAndUpdate = originals.findOneAndUpdate;
     Event.find = originals.find;
     Notification.create = originals.notificationCreate;
   });
@@ -150,13 +167,13 @@ test('approved event registration creates a unique code and QR payload', async (
 
   assert.equal(res.statusCode, 201);
   assert.equal(res.payload.data.registration.status, 'Registered');
-  assert.match(res.payload.data.registration.registrationCode, /^[a-f0-9]{64}$/);
+  assert.match(res.payload.data.registration.registrationCode, /^REG-[A-Z0-9_-]{22}$/);
   assert.match(
     res.payload.data.registration.qrPayload,
     new RegExp(`^CEMS-REGISTRATION:${eventId}:`)
   );
   assert.equal(event.registeredStudents.length, 1);
-  assert.equal(event.saveCalls, 1);
+  assert.equal(event.saveCalls, 0);
   assert.equal(createdNotifications[0].type, 'REGISTRATION_CONFIRMATION');
 });
 
@@ -218,7 +235,7 @@ test('cancelling a confirmed registration promotes the earliest waitlisted stude
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.data.promoted, true);
   assert.equal(firstWaitlisted.status, 'Registered');
-  assert.match(firstWaitlisted.registrationCode, /^[a-f0-9]{64}$/);
+  assert.match(firstWaitlisted.registrationCode, /^REG-[A-Z0-9_-]{22}$/);
   assert.equal(secondWaitlisted.status, 'Waitlisted');
   assert.equal(event.registeredStudents.length, 1);
   assert.equal(String(event.registeredStudents[0]), String(otherStudentId));
@@ -433,27 +450,39 @@ test('registration rejects invalid, unavailable, and already-started events', as
   assert.match(closed.payload.message, /started/i);
 });
 
-test('registration retries a version conflict with a freshly loaded event', async (t) => {
+test('registration uses a conditional atomic update instead of optimistic save retries', async (t) => {
   const originals = {
     findOne: Event.findOne,
+    findOneAndUpdate: Event.findOneAndUpdate,
     notificationCreate: Notification.create,
   };
   t.after(() => {
     Event.findOne = originals.findOne;
+    Event.findOneAndUpdate = originals.findOneAndUpdate;
     Notification.create = originals.notificationCreate;
   });
-  const stale = makeEvent({
-    async save() { throw Object.assign(new Error('stale'), { name: 'VersionError' }); },
+  const event = makeEvent();
+  let updateFilter;
+  let updates = 0;
+  Event.findOne = () => ({ select: async () => event });
+  Event.findOneAndUpdate = (filter, update) => ({
+    select: async () => {
+      updateFilter = filter;
+      updates += 1;
+      if (!filter.$expr.$lt) return null;
+      event.registrations.push(update.$push.registrations);
+      event.registeredStudents.push(update.$addToSet.registeredStudents);
+      return event;
+    },
   });
-  const fresh = makeEvent();
-  let lookups = 0;
-  Event.findOne = () => ({ select: async () => (lookups++ === 0 ? stale : fresh) });
   Notification.create = async () => ({});
 
   const res = await registrationRequest(registerForEvent);
   assert.equal(res.statusCode, 201);
-  assert.equal(lookups, 2);
-  assert.equal(fresh.registrations.length, 1);
+  assert.equal(updates, 1);
+  assert.equal(updateFilter.$expr.$lt[0].$size.$ifNull[0], '$registeredStudents');
+  assert.equal(event.saveCalls, 0);
+  assert.equal(event.registrations.length, 1);
 });
 
 test('cancellation rejects invalid, missing, started, and inactive registrations', async (t) => {

@@ -1,7 +1,8 @@
-const test = require('node:test');
+﻿const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
+const EventAuditLog = require('../models/EventAuditLog');
 const { checkInStudent } = require('../controllers/eventController');
 
 function makeResponse() {
@@ -22,6 +23,7 @@ function installEventMocks(t, event, updateResult = { modifiedCount: 1 }) {
   const originals = {
     findById: Event.findById,
     updateOne: Event.updateOne,
+    auditCreate: EventAuditLog.create,
   };
   let updateFilter;
   let update;
@@ -32,10 +34,12 @@ function installEventMocks(t, event, updateResult = { modifiedCount: 1 }) {
     update = changes;
     return updateResult;
   };
+  EventAuditLog.create = async (record) => record;
 
   t.after(() => {
     Event.findById = originals.findById;
     Event.updateOne = originals.updateOne;
+    EventAuditLog.create = originals.auditCreate;
   });
 
   return () => ({ updateFilter, update });
@@ -51,6 +55,7 @@ function attendanceFixture(overrides = {}) {
     _id: registrationId,
     student: studentId,
     status: 'Registered',
+    registrationCode,
     attendedAt: null,
   };
   const event = {
@@ -64,6 +69,9 @@ function attendanceFixture(overrides = {}) {
         return String(id) === String(registrationId)
           ? registration
           : undefined;
+      },
+      find(predicate) {
+        return predicate(registration) ? registration : undefined;
       },
     },
     ...overrides,
@@ -113,10 +121,28 @@ test('a valid QR payload checks in the matching event registration once', async 
   assert.ok(update['$set']['registrations.$.attendedAt'] instanceof Date);
 });
 
+test('a trimmed case-insensitive short registration code checks in for its active event', async (t) => {
+  const fixture = attendanceFixture();
+  const getUpdate = installEventMocks(t, fixture.event);
+  const res = makeResponse();
+
+  await checkInStudent(
+    requestFor(fixture, `  ${fixture.registrationCode.toUpperCase()}  `),
+    res,
+    (error) => { throw error; }
+  );
+
+  const { updateFilter } = getUpdate();
+  assert.equal(res.statusCode, 200);
+  assert.equal(updateFilter._id.toString(), String(fixture.eventId));
+  assert.equal(updateFilter.registrations.$elemMatch.registrationCode, fixture.registrationCode);
+});
+
 test('a re-scan is rejected without writing a second attendance record', async (t) => {
   const fixture = attendanceFixture();
   fixture.event.registrations.id = () => ({
     status: 'Registered',
+    registrationCode: fixture.registrationCode,
     attendedAt: new Date(),
   });
   const getUpdate = installEventMocks(t, fixture.event);

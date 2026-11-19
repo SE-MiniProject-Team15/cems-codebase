@@ -2,9 +2,23 @@ const crypto = require('node:crypto');
 const mongoose = require('mongoose');
 const Event = require('../models/Event');
 const Notification = require('../models/Notification');
-const { sendEmailToUsers } = require('../services/notificationService');
-
+const {
+  sendEmailToUsers,
+  sendRegistrationConfirmationEmail,
+} = require('../services/notificationService');
 const MAX_SAVE_ATTEMPTS = 5;
+
+function findUpdatedRegistration(event, registrationId) {
+  return typeof event.registrations.id === 'function'
+    ? event.registrations.id(registrationId)
+    : event.registrations.find(
+      (registration) => String(registration._id) === String(registrationId)
+    );
+}
+
+function createRegistrationCode() {
+  return `REG-${crypto.randomBytes(16).toString('base64url').toUpperCase()}`;
+}
 
 function sendError(res, status, message) {
   return res.status(status).json({ status: 'fail', message });
@@ -42,7 +56,7 @@ function registrationPayload(event, registration) {
   };
 }
 
-async function notifyStudent(recipient, eventId, type, title, message) {
+async function notifyStudent(recipient, eventId, type, title, message, ticket) {
   let saved = true;
   try {
     await Notification.create({ recipient, event: eventId, type, title, message });
@@ -51,7 +65,16 @@ async function notifyStudent(recipient, eventId, type, title, message) {
     console.error('Registration notification could not be saved:', error.name || 'Error');
   }
 
-  await sendEmailToUsers([recipient], title, message);
+  if (ticket) {
+    await sendRegistrationConfirmationEmail(
+      recipient,
+      ticket.eventTitle,
+      ticket.registrationCode,
+      ticket.qrPayload
+    );
+  } else {
+    await sendEmailToUsers([recipient], title, message);
+  }
   return saved;
 }
 
@@ -68,92 +91,138 @@ async function registerForEvent(req, res, next) {
   }
 
   try {
-    for (let attempt = 0; attempt < MAX_SAVE_ATTEMPTS; attempt += 1) {
-      const event = await findRegistrationEvent(eventId);
-      if (!event || !isPubliclyApproved(event)) {
-        return sendError(res, 404, 'Approved event not found');
-      }
-
-      const details = getPublishedDetails(event);
-      const now = new Date();
-      if (new Date(details.registrationDeadline) <= now) {
-        return sendError(res, 400, 'The registration deadline has passed');
-      }
-      if (new Date(details.startDateTime) <= now) {
-        return sendError(res, 400, 'Registration is closed for events that have started');
-      }
-
-      const studentKey = String(studentId);
-      const previousRegistration = event.registrations.find(
-        (registration) =>
-          String(registration.student) === studentKey &&
-          registration.status !== 'Cancelled'
-      );
-      if (previousRegistration || event.registeredStudents.some(
-        (registeredStudent) => String(registeredStudent) === studentKey
-      )) {
-        return sendError(res, 409, 'You already have an active registration for this event');
-      }
-
-      const isFull = event.registeredStudents.length >= Number(details.capacity);
-      const status = isFull ? 'Waitlisted' : 'Registered';
-      const registration = {
-        student: studentId,
-        status,
-        ...(status === 'Registered' && {
-          registrationCode: crypto.randomBytes(32).toString('hex'),
-        }),
-      };
-
-      event.registrations.push(registration);
-      if (status === 'Registered') {
-        event.registeredStudents.addToSet
-          ? event.registeredStudents.addToSet(studentId)
-          : event.registeredStudents.push(studentId);
-      }
-
-      try {
-        await event.save();
-      } catch (error) {
-        if (isVersionConflict(error) && attempt < MAX_SAVE_ATTEMPTS - 1) {
-          continue;
-        }
-        if (isVersionConflict(error)) {
-          return sendError(res, 409, 'The event changed during registration. Please try again.');
-        }
-        throw error;
-      }
-
-      const savedRegistration = event.registrations[event.registrations.length - 1];
-      const notificationSaved = status === 'Registered'
-        ? await notifyStudent(
-          studentId,
-          event._id,
-          'REGISTRATION_CONFIRMATION',
-          'Registration confirmed',
-          `Your registration for "${details.title}" is confirmed.`
-        )
-        : await notifyStudent(
-          studentId,
-          event._id,
-          'WAITLIST_JOINED',
-          'Added to the waitlist',
-          `You are on the waitlist for "${details.title}".`
-        );
-
-      return res.status(201).json({
-        status: 'success',
-        message: status === 'Registered'
-          ? 'Registration confirmed.'
-          : 'Event is full. You have joined the waitlist.',
-        data: {
-          registration: registrationPayload(event, savedRegistration),
-          notificationSaved,
-        },
-      });
+    const event = await findRegistrationEvent(eventId);
+    if (!event || !isPubliclyApproved(event)) {
+      return sendError(res, 404, 'Approved event not found');
     }
 
-    return sendError(res, 409, 'Could not complete registration. Please try again.');
+    const details = getPublishedDetails(event);
+    const now = new Date();
+    if (new Date(details.registrationDeadline) <= now) {
+      return sendError(res, 400, 'The registration deadline has passed');
+    }
+    if (new Date(details.startDateTime) <= now) {
+      return sendError(res, 400, 'Registration is closed for events that have started');
+    }
+
+    const studentKey = String(studentId);
+    const previousRegistration = event.registrations.find(
+      (registration) =>
+        String(registration.student) === studentKey &&
+        registration.status !== 'Cancelled'
+    );
+    if (previousRegistration || event.registeredStudents.some(
+      (registeredStudent) => String(registeredStudent) === studentKey
+    )) {
+      return sendError(res, 409, 'You already have an active registration for this event');
+    }
+
+    const eligibleEvent = event.status === 'Approved'
+      ? { status: 'Approved' }
+      : { status: { $ne: 'Cancelled' }, approvedSnapshot: { $exists: true } };
+    const availableSeats = {
+      _id: eventId,
+      ...eligibleEvent,
+      registrations: {
+        $not: {
+          $elemMatch: { student: studentId, status: { $ne: 'Cancelled' } },
+        },
+      },
+      registeredStudents: { $ne: studentId },
+      $expr: {
+        $lt: [
+          { $size: { $ifNull: ['$registeredStudents', []] } },
+          Number(details.capacity),
+        ],
+      },
+    };
+
+    const registrationCode = createRegistrationCode();
+    const registrationId = new mongoose.Types.ObjectId();
+    const baseRegistration = {
+      _id: registrationId,
+      student: studentId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const updateOptions = { returnDocument: 'after', runValidators: true };
+    let updatedEvent = await Event.findOneAndUpdate(
+      availableSeats,
+      {
+        $push: {
+          registrations: {
+            ...baseRegistration,
+            status: 'Registered',
+            registrationCode,
+          },
+        },
+        $addToSet: { registeredStudents: studentId },
+      },
+      updateOptions
+    ).select('+registrations.registrationCode');
+    let status = 'Registered';
+
+    if (!updatedEvent) {
+      const fullEvent = await Event.findOneAndUpdate(
+        {
+          ...availableSeats,
+          $expr: {
+            $gte: [
+              { $size: { $ifNull: ['$registeredStudents', []] } },
+              Number(details.capacity),
+            ],
+          },
+        },
+        {
+          $push: {
+            registrations: {
+              ...baseRegistration,
+              status: 'Waitlisted',
+            },
+          },
+        },
+        updateOptions
+      ).select('+registrations.registrationCode');
+      updatedEvent = fullEvent;
+      status = 'Waitlisted';
+    }
+
+    if (!updatedEvent) {
+      return sendError(res, 409, 'Registration could not be completed. Please refresh and try again.');
+    }
+
+    const savedRegistration = findUpdatedRegistration(updatedEvent, registrationId);
+    const notificationSaved = status === 'Registered'
+      ? await notifyStudent(
+        studentId,
+        updatedEvent._id,
+        'REGISTRATION_CONFIRMATION',
+        'Registration confirmed',
+        `Your registration for "${details.title}" is confirmed.`,
+        {
+          eventTitle: details.title,
+          registrationCode: savedRegistration.registrationCode,
+          qrPayload: `CEMS-REGISTRATION:${updatedEvent._id}:${savedRegistration._id}:${savedRegistration.registrationCode}`,
+        }
+      )
+      : await notifyStudent(
+        studentId,
+        updatedEvent._id,
+        'WAITLIST_JOINED',
+        'Added to the waitlist',
+        `You are on the waitlist for "${details.title}".`
+      );
+
+    return res.status(201).json({
+      status: 'success',
+      message: status === 'Registered'
+        ? 'Registration confirmed.'
+        : 'Event is full. You have joined the waitlist.',
+      data: {
+        registration: registrationPayload(updatedEvent, savedRegistration),
+        notificationSaved,
+      },
+    });
   } catch (error) {
     return next(error);
   }
@@ -209,7 +278,7 @@ async function cancelRegistration(req, res, next) {
 
         if (nextInLine) {
           nextInLine.status = 'Registered';
-          nextInLine.registrationCode = crypto.randomBytes(32).toString('hex');
+          nextInLine.registrationCode = createRegistrationCode();
           event.registeredStudents.addToSet
             ? event.registeredStudents.addToSet(nextInLine.student)
             : event.registeredStudents.push(nextInLine.student);

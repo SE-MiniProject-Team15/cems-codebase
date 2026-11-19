@@ -57,14 +57,15 @@ async function fixture(page, role = 'Student', guest = false) {
   return writes
 }
 
-test('account creation submits fields and opens the student dashboard', async ({ page }) => {
+test('account creation submits fields and redirects to login with confirmation', async ({ page }) => {
   const writes = await fixture(page, 'Student', true)
   await page.goto('/register')
   await page.getByLabel('Name', { exact: true }).fill('Campus User')
   await page.getByLabel('College Email').fill('student@example.edu')
   await page.getByLabel('Password', { exact: true }).fill('Example123')
   await page.getByRole('button', { name: 'Create account' }).click()
-  await expect(page.getByRole('heading', { name: 'Student Dashboard' })).toBeVisible()
+  await expect(page).toHaveURL(/\/login/)
+  await expect(page.getByText(/registration successful/i)).toBeVisible()
   expect(writes[0].body).toEqual({ name: 'Campus User', email: 'student@example.edu', password: 'Example123', role: 'Student' })
 })
 

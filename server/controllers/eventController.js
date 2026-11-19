@@ -3,6 +3,7 @@ const Event = require('../models/Event');
 const Notification = require('../models/Notification');
 const EventAuditLog = require('../models/EventAuditLog');
 const mongoose = require('mongoose');
+const sanitizeHtml = require('sanitize-html');
 const { sendEmailToUsers } = require('../services/notificationService');
 
 const DETAIL_FIELDS = [
@@ -19,6 +20,18 @@ const DETAIL_FIELDS = [
 ];
 const MIN_DECISION_COMMENT_LENGTH = 10;
 const MAX_DECISION_COMMENT_LENGTH = 1000;
+
+function sanitizedEventDetails(source) {
+  const details = {};
+  for (const field of DETAIL_FIELDS) {
+    if (source[field] === undefined) continue;
+    const value = source[field];
+    details[field] = typeof value === 'string'
+      ? sanitizeHtml(value, { allowedTags: [], allowedAttributes: {} }).trim()
+      : value;
+  }
+  return details;
+}
 
 function eventDetails(source) {
   const details = {};
@@ -245,15 +258,16 @@ async function createEvent(req, res, next) {
       return sendError(res, 400, 'Event details must be a JSON object');
     }
 
+    const cleanDetails = sanitizedEventDetails(req.body);
     const isDraft = req.body.status === 'Draft';
-    const errors = validateEventDetails(req.body, isDraft);
+    const errors = validateEventDetails(cleanDetails, isDraft);
 
     if (errors.length) {
       return sendError(res, 400, errors.join('; '));
     }
 
     if (!isDraft) {
-      const conflict = await hasVenueConflict(req.body);
+      const conflict = await hasVenueConflict(cleanDetails);
 
       if (conflict) {
         return sendError(
@@ -265,7 +279,7 @@ async function createEvent(req, res, next) {
     }
 
     const event = await Event.create({
-      ...eventDetails(req.body),
+      ...cleanDetails,
       organizer: req.user._id,
       status: isDraft ? 'Draft' : 'Pending Approval',
     });
@@ -331,18 +345,16 @@ async function updateEvent(req, res, next) {
       return sendError(res, 400, 'Cancelled events cannot be edited');
     }
 
-    if (event.status === 'Pending Approval') {
-      return sendError(res, 400, 'Events pending approval cannot be edited');
-    }
-
+    const cleanDetails = sanitizedEventDetails(req.body);
     const nextDetails = {
       ...eventDetails(event.toObject()),
-      ...req.body,
+      ...cleanDetails,
     };
 
     const wasApproved = event.status === 'Approved';
+    const wasPending = event.status === 'Pending Approval';
     const hasPublishedVersion = wasApproved || Boolean(event.approvedSnapshot);
-    const isDraft = !wasApproved && (
+    const isDraft = !wasApproved && !wasPending && (
       req.body.status === 'Draft' ||
       (req.body.status === undefined && event.status === 'Draft')
     );
@@ -378,7 +390,7 @@ async function updateEvent(req, res, next) {
       }
     }
 
-    event.status = isDraft ? 'Draft' : 'Pending Approval';
+    event.status = wasPending ? 'Pending Approval' : isDraft ? 'Draft' : 'Pending Approval';
     await event.save();
 
     let notificationResult;
@@ -631,8 +643,15 @@ async function decideEvent(req, res, next) {
 
       const auditRecord = {
         administrator: req.user._id,
+        actor: req.user._id,
         event: event._id,
         action: decision.audit,
+        targetType: 'Event',
+        targetId: event._id,
+        details: {
+          status: decision.status,
+          ...(normalizedComment && { comment: normalizedComment }),
+        },
         ...(normalizedComment && { comment: normalizedComment }),
       };
       let auditLog;
@@ -1233,20 +1252,26 @@ async function getEvent(req, res, next) {
 
 async function checkInStudent(req, res, next) {
   try {
-    if (!mongoose.isValidObjectId(req.params.eventId)) {
+    const eventIdValue = req.params.eventId || req.params.id;
+    if (!mongoose.isValidObjectId(eventIdValue)) {
       return sendError(res, 404, 'Event not found');
     }
 
-    const payload = typeof req.body.code === 'string' ? req.body.code.trim() : '';
-    const ticket = /^CEMS-REGISTRATION:([a-f0-9]{24}):([a-f0-9]{24}):([a-f0-9]{64})$/i.exec(payload);
-    if (!ticket || ticket[1].toLowerCase() !== req.params.eventId.toLowerCase()) {
+    const payload = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+    const ticket = /^CEMS-REGISTRATION:([a-f0-9]{24}):([a-f0-9]{24}):((?:[a-f0-9]{64}|REG-[A-Z0-9_-]{22}))$/i.exec(payload);
+    const shortCode = ticket ? null : payload.toLowerCase();
+    if (
+      (!ticket && !/^(?:[a-f0-9]{64}|REG-[a-z0-9_-]{22})$/i.test(payload)) ||
+      (ticket && ticket[1].toLowerCase() !== eventIdValue.toLowerCase())
+    ) {
       return sendError(res, 400, 'Scan or enter a valid ticket for this event');
     }
 
-    const eventId = new mongoose.Types.ObjectId(req.params.eventId);
-    const registrationId = new mongoose.Types.ObjectId(ticket[2]);
-    const registrationCode = ticket[3].toLowerCase();
-    const event = await Event.findById(eventId);
+    const eventId = new mongoose.Types.ObjectId(eventIdValue);
+    const eventQuery = Event.findById(eventId);
+    const event = await (eventQuery.select
+      ? eventQuery.select('+registrations.registrationCode')
+      : eventQuery);
 
     if (!event) {
       return sendError(res, 404, 'Event not found');
@@ -1266,10 +1291,22 @@ async function checkInStudent(req, res, next) {
       return sendError(res, 409, 'Check-in is available only during the event');
     }
 
-    const registration = event.registrations.id(registrationId);
+    const registration = ticket
+      ? event.registrations.id(new mongoose.Types.ObjectId(ticket[2]))
+      : typeof event.registrations.find === 'function'
+        ? event.registrations.find(
+          (item) => item.registrationCode?.trim().toLowerCase() === shortCode
+        )
+        : undefined;
+    const registrationId = registration?._id;
+    const registrationCode = registration?.registrationCode?.trim();
 
     if (!registration || registration.status !== 'Registered') {
-      return sendError(res, 404, 'This code is not registered for this event');
+      return sendError(res, ticket ? 404 : 400, 'This code is not registered for this event');
+    }
+
+    if (ticket && registrationCode?.toLowerCase() !== ticket[3].toLowerCase()) {
+      return sendError(res, 400, 'Scan or enter a valid ticket for this event');
     }
 
     if (registration.attendedAt) {
@@ -1304,6 +1341,20 @@ async function checkInStudent(req, res, next) {
       return sendError(res, 409, 'This registration has already been checked in');
     }
 
+    try {
+      await EventAuditLog.create({
+        actor: req.user._id,
+        event: eventId,
+        action: 'CHECK_IN',
+        targetType: 'Registration',
+        targetId: registrationId,
+        details: { studentId: registration.student },
+      });
+    } catch (error) {
+      console.error('Attendance audit record could not be saved:', error.name || 'Error');
+      return sendError(res, 503, 'Attendance was recorded, but its audit record could not be saved');
+    }
+
     return res.json({
       status: 'success',
       data: {
@@ -1311,6 +1362,36 @@ async function checkInStudent(req, res, next) {
         studentId: String(registration.student),
         attendedAt: now,
         checkedInBy: String(req.user._id),
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+async function listAdminAuditLogs(req, res, next) {
+  try {
+    const logs = await EventAuditLog.find()
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .populate('actor', 'name email role')
+      .populate('administrator', 'name email role')
+      .populate('event', 'title');
+
+    return res.json({
+      status: 'success',
+      results: logs.length,
+      data: {
+        auditLogs: logs.map((log) => {
+          const entry = typeof log.toObject === 'function' ? log.toObject() : log;
+          return {
+            ...entry,
+            actor: entry.actor || entry.administrator,
+            targetType: entry.targetType || 'Event',
+            targetId: entry.targetId || entry.event?._id || entry.event,
+            timestamp: entry.timestamp || entry.createdAt,
+          };
+        }),
       },
     });
   } catch (error) {
@@ -1410,6 +1491,7 @@ module.exports = {
   listPendingEvents,
   getPendingEventDetails,
   decideEvent,
+  listAdminAuditLogs,
   listPublicEvents,
   listEvents,
   getEvent,

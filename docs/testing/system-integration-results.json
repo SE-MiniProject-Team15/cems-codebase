@@ -1,7 +1,7 @@
 {
-  "executedAt": "2026-11-13T18:31:29.852Z",
-  "commit": "d735cc5d17d8c9464a08e3ade365a745a7cb1c30",
-  "node": "v20.20.2",
+  "executedAt": "2026-11-19T01:03:58.683Z",
+  "commit": "63530693fff487c285b6fcb79f307657c94a02f0",
+  "node": "v24.11.0",
   "results": [
     {
       "name": "Account registration, login cookies, identity and role restrictions",
@@ -30,9 +30,13 @@
     {
       "name": "Attendance check-in, duplicate prevention and persisted attendance",
       "status": "PASS"
+    },
+    {
+      "name": "200 concurrent distinct registrations are atomic and stay below two seconds p95",
+      "status": "PASS"
     }
   ],
-  "passed": 7,
+  "passed": 8,
   "failed": 0,
   "exitCode": 0
 }

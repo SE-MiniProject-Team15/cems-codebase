@@ -1,5 +1,6 @@
 
 const nodemailer = require('nodemailer');
+const QRCode = require('qrcode');
 const User = require('../models/User');
 
 let transporter;
@@ -28,7 +29,7 @@ function getTransporter() {
   return transporter;
 }
 
-async function sendNotificationEmail(to, subject, message) {
+async function sendNotificationEmail(to, subject, message, options = {}) {
   try {
     if (!to) return;
 
@@ -44,10 +45,42 @@ async function sendNotificationEmail(to, subject, message) {
       to,
       subject,
       text: message,
+      ...(options.html && { html: options.html }),
+      ...(options.attachments && { attachments: options.attachments }),
     });
   } catch (error) {
     // Email failure must not undo the underlying application action.
     console.error('Notification email delivery failed:', error.name || 'Error');
+  }
+}
+
+async function sendRegistrationConfirmationEmail(userId, eventTitle, registrationCode, qrPayload) {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    return;
+  }
+
+  try {
+    const recipient = await User.findById(userId).select('email');
+    if (!recipient?.email) return;
+
+    const qrImage = await QRCode.toBuffer(qrPayload, { type: 'png' });
+    const message = `Your registration for "${eventTitle}" is confirmed.\nRegistration code: ${registrationCode}\nYour QR ticket is attached.`
+    await sendNotificationEmail(
+      recipient.email,
+      'Registration confirmed',
+      message,
+      {
+        html: `<p>Your registration for "${eventTitle}" is confirmed.</p><p>Registration code: <strong>${registrationCode}</strong></p><p>Your QR ticket:</p><img src="cid:cems-registration-ticket" alt="Registration QR ticket" />`,
+        attachments: [{
+          filename: 'registration-ticket.png',
+          content: qrImage,
+          contentType: 'image/png',
+          cid: 'cems-registration-ticket',
+        }],
+      }
+    );
+  } catch (error) {
+    console.error('Registration confirmation email failed:', error.name || 'Error');
   }
 }
 
@@ -70,4 +103,8 @@ async function sendEmailToUsers(userIds, subject, message) {
   }
 }
 
-module.exports = { sendNotificationEmail, sendEmailToUsers };
+module.exports = {
+  sendNotificationEmail,
+  sendEmailToUsers,
+  sendRegistrationConfirmationEmail,
+};
